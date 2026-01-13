@@ -1,7 +1,0 @@
-Short-term
-- Implement query string for sort and its args
-- Think about the API and associated error. Which one shoudl panic(crash 
-immediately) or graceful degradation
-
-Long-term
-- Move onto physical storage

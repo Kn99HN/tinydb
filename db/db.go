@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"os"
+	"bufio"
 )
 
 
@@ -83,7 +85,7 @@ func readFromDisk(file_path string) []Record {
 		if len(parts) != 3 {
 			panic(fmt.Sprintf("Malformed line %s", line))
 		}
-		records := append(records, makeRecord(parts[0], parts[1], parts[2]))
+		records = append(records, makeRecord(parts[0], parts[1], parts[2]))
 	}
 	return records
 }
