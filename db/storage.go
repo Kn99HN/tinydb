@@ -26,21 +26,94 @@ type Writer interface {
 }
 
 type Reader interface {
-	ReadIndex(fpath string) []DataIndex
+	Read(s string) *Data
 }
 
 type StorageWriter struct {
 	i int
+	dir string
 	file *os.File
 }
 
-type StorageReader struct {}
+type StorageReader struct {
+	file *os.File
+}
 
 type DataIndex struct {
 	min_key string
 	max_key string
 	file_path string
 }
+
+func initStorageReader() *StorageReader {
+	// a single file for now
+	file_path := fmt.Sprintf("%s/data_1")
+	f, err := os.Open(file_path)
+	if err != nil {
+		panic("Failed to create a storage reader")
+	}
+	return &StorageReader{ f }
+}
+
+func (r StorageReader) Read(s string) *Data {
+	var offset int64 = 4
+	_, err := r.file.Seek(offset, 0)
+	if err != nil {
+		log.Fatal(err)
+	}
+	d := &Data{}
+	d.cols = make([]string, 0)
+	for true || err == io.EOF {
+		// these function should return error
+		payload_length := parseVarInts(r.file)
+		key_length := parseVarInts(r.file)
+		key := parseString(r.file, key_length)
+		if key == s {
+			cols_length := payload_length - key_length
+			d.row_key = key
+			d.size = uint32(payload_length)
+			for cols_length != 0 {
+				col_length := parseVarInts(r.file)
+				col_val := parseString(r.file, col_length)
+				cols_length = cols_length - col_length
+				d.cols = append(d.cols,col_val)
+			}
+		}
+	}
+	if d.size == 0 { return nil }
+	return d
+}
+
+func parseString(f *os.File, str_length int) string {
+	result := make([]byte, str_length)
+	for i := 0; i < str_length; i++ {
+		b := make([]byte, 1)
+		_, err := f.Read(b)
+		if err != nil {
+			log.Fatal(err)
+		}
+		result[i] = b[0]
+	}
+	return string(result)
+}
+
+func parseVarInts(f *os.File) int {
+ continuation := true
+ val := 0
+ for continuation {
+ 	b := make([]byte, 1)
+ 	_, err := f.Read(b)
+	if err != nil {
+		return 0
+	}
+ 	val = val << 7
+ 	current_b := b[0]
+ 	continuation = ((current_b & 0x80) == 0x80)
+ 	val = val | int(current_b & 0x7F)
+ }
+ return val
+}
+
 
 
 func initStorageWriter(dir string) *StorageWriter {
@@ -58,23 +131,7 @@ func initStorageWriter(dir string) *StorageWriter {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return &StorageWriter{ 0, f }
-}
-
-func parseVarInts(buffer []byte, starting_index int) (int, int) {
- continuation := true
- val := 0
- for continuation {
- 	val = val << 7
- 	b := buffer[starting_index]
- 	continuation = ((b & 0x80) == 0x80)
- 	if starting_index == len(buffer) && continuation {
- 	 panic("Reached the end of byte stream but there are still more bytes to decode")
- 	}
- 	starting_index += 1
- 	val = val | int(b & 0x7F)
- }
- return val, starting_index
+	return &StorageWriter{ 0, dir, f }
 }
 
 func ToVarInts [T ~uint32| ~uint64 | ~int32 | ~int64 | ~int] (i T) []byte {
@@ -92,7 +149,6 @@ func ToVarInts [T ~uint32| ~uint64 | ~int32 | ~int64 | ~int] (i T) []byte {
 	}
 	return buf
 }
-
 
 /**
 Data file_format:
@@ -175,7 +231,7 @@ func ToBytes(p *Data) []byte {
 func (s *StorageWriter) Flush() {
 	// flush any pending writes
 	s.i += 1
-	file_path := fmt.Sprintf("%s/data_%d", dir, s.i)
+	file_path := fmt.Sprintf("%s/data_%d", s.dir, s.i)
 	old_file := s.file
 	f, err := os.OpenFile(file_path, default_storage_write_mode, permission)
 	s.file = f
