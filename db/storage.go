@@ -10,8 +10,8 @@ import (
 )
 
 const dir = "blocks"
-const default_storage_write_mode = os.O_APPEND | os.O_CREATE | os.O_WRONLY
-const permission = 0644
+const default_storage_write_mode = os.O_APPEND | os.O_CREATE | os.O_RDWR
+const permission = 0750
 const default_file_size uint32 = 1024
 
 type Data struct {
@@ -21,7 +21,7 @@ type Data struct {
 }
 
 type Writer interface {
-	Write(data Data) bool
+	Write(data *Data) bool
 	Flush() bool
 }
 
@@ -45,9 +45,9 @@ type DataIndex struct {
 	file_path string
 }
 
-func initStorageReader() *StorageReader {
+func initStorageReader(dir string) *StorageReader {
 	// a single file for now
-	file_path := fmt.Sprintf("%s/data_1")
+	file_path := fmt.Sprintf("data_0")
 	f, err := os.Open(file_path)
 	if err != nil {
 		panic("Failed to create a storage reader")
@@ -63,18 +63,23 @@ func (r StorageReader) Read(s string) *Data {
 	}
 	d := &Data{}
 	d.cols = make([]string, 0)
-	for true || err == io.EOF {
+	for true {
 		// these function should return error
-		payload_length := parseVarInts(r.file)
-		key_length := parseVarInts(r.file)
-		key := parseString(r.file, key_length)
+		payload_length, varint_err := parseVarInts(r.file)
+		if varint_err == io.EOF { break }
+		key_length, varint_err := parseVarInts(r.file)
+		if varint_err == io.EOF { break }
+		key, string_err := parseString(r.file, key_length)
+		if string_err == io.EOF { break }
 		if key == s {
 			cols_length := payload_length - key_length
 			d.row_key = key
 			d.size = uint32(payload_length)
 			for cols_length != 0 {
-				col_length := parseVarInts(r.file)
-				col_val := parseString(r.file, col_length)
+				col_length, varint_err := parseVarInts(r.file)
+				if varint_err == io.EOF { break }
+				col_val, string_err := parseString(r.file, col_length)
+				if string_err == io.EOF { break }
 				cols_length = cols_length - col_length
 				d.cols = append(d.cols,col_val)
 			}
@@ -84,40 +89,42 @@ func (r StorageReader) Read(s string) *Data {
 	return d
 }
 
-func parseString(f *os.File, str_length int) string {
+func parseString(f *os.File, str_length int) (string, error) {
 	result := make([]byte, str_length)
+	var err error = nil
 	for i := 0; i < str_length; i++ {
 		b := make([]byte, 1)
-		_, err := f.Read(b)
-		if err != nil {
+		_, err = f.Read(b)
+		if err != nil && err != io.EOF {
 			log.Fatal(err)
 		}
 		result[i] = b[0]
 	}
-	return string(result)
+	return string(result), err
 }
 
-func parseVarInts(f *os.File) int {
+func parseVarInts(f *os.File) (int, error) {
  continuation := true
  val := 0
+ var err error = nil
  for continuation {
  	b := make([]byte, 1)
- 	_, err := f.Read(b)
-	if err != nil {
-		return 0
+ 	_, err = f.Read(b)
+	if err != nil && err != io.EOF {
+		return 0, err
 	}
  	val = val << 7
  	current_b := b[0]
  	continuation = ((current_b & 0x80) == 0x80)
  	val = val | int(current_b & 0x7F)
  }
- return val
+ return val, err
 }
 
 
 
 func initStorageWriter(dir string) *StorageWriter {
-	file_path := fmt.Sprintf("%s/data_%d", dir, 0)
+	file_path := fmt.Sprintf("./data_%d", 0)
 	f, err := os.OpenFile(file_path, default_storage_write_mode, permission)
 	if err != nil {
 		panic("Failed to create a storage writer")
@@ -201,7 +208,8 @@ func (s *StorageWriter) Write(p *Data) bool {
 	}
 	offset := uint32(len(file_size)) + (default_file_size - fsize)
 	data := ToBytes(p)
-	_, err = s.file.WriteAt(data, int64(offset))
+	n, err := s.file.WriteAt(data, int64(offset))
+	fmt.Printf("Write %d bytes of data", n)
 	if err != nil {
 		log.Fatal(err)
 	}
