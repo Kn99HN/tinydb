@@ -9,8 +9,7 @@ import (
 	"io"
 )
 
-const dir = "blocks"
-const default_storage_write_mode = os.O_APPEND | os.O_CREATE | os.O_RDWR
+const default_storage_write_mode = os.O_CREATE | os.O_RDWR
 const permission = 0750
 const default_file_size uint32 = 1024
 
@@ -27,11 +26,10 @@ type Writer interface {
 
 type Reader interface {
 	Read(s string) *Data
+	Close() bool
 }
 
 type StorageWriter struct {
-	i int
-	dir string
 	file *os.File
 }
 
@@ -45,9 +43,9 @@ type DataIndex struct {
 	file_path string
 }
 
-func initStorageReader(dir string) *StorageReader {
+func initStorageReader(dir string, file_number int) *StorageReader {
 	// a single file for now
-	file_path := fmt.Sprintf("data_0")
+	file_path := fmt.Sprintf("./%s/data_%d", dir, file_number)
 	f, err := os.Open(file_path)
 	if err != nil {
 		panic("Failed to create a storage reader")
@@ -55,33 +53,49 @@ func initStorageReader(dir string) *StorageReader {
 	return &StorageReader{ f }
 }
 
-func (r StorageReader) Read(s string) *Data {
-	var offset int64 = 4
-	_, err := r.file.Seek(offset, 0)
+func (r *StorageReader) Read(s string) *Data {
+	_, err := r.file.Seek(0, 0)
 	if err != nil {
 		log.Fatal(err)
 	}
+	buf := make([]byte, 4)
+	_, err = r.file.Read(buf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var free_space uint32 = 0
+	for i := 0; i < len(buf); i++ {
+		free_space = free_space << 8
+		free_space |= uint32(buf[i])
+	}
+	max_size_to_read := default_file_size - free_space
+	var current_size uint32 = 4
 	d := &Data{}
 	d.cols = make([]string, 0)
-	for true {
-		// these function should return error
-		payload_length, varint_err := parseVarInts(r.file)
+	for current_size < max_size_to_read {
+		payload_size, varint_err := parseVarInts(r.file)
+		current_size += uint32(payload_size)
 		if varint_err == io.EOF { break }
-		key_length, varint_err := parseVarInts(r.file)
+		key_size, varint_err := parseVarInts(r.file)
 		if varint_err == io.EOF { break }
-		key, string_err := parseString(r.file, key_length)
+		key, string_err := parseString(r.file, key_size)
 		if string_err == io.EOF { break }
 		if key == s {
-			cols_length := payload_length - key_length
+			max_cols_size := payload_size - key_size
+			current_cols_size := 0
 			d.row_key = key
-			d.size = uint32(payload_length)
-			for cols_length != 0 {
-				col_length, varint_err := parseVarInts(r.file)
+			d.size = uint32(payload_size)
+			for current_cols_size < max_cols_size {
+				col_size, varint_err := parseVarInts(r.file)
+				current_cols_size += col_size
 				if varint_err == io.EOF { break }
-				col_val, string_err := parseString(r.file, col_length)
+				col_val, string_err := parseString(r.file, col_size)
 				if string_err == io.EOF { break }
-				cols_length = cols_length - col_length
-				d.cols = append(d.cols,col_val)
+				d.cols = append(d.cols, col_val)
+			}
+		} else {
+			if _, err := r.file.Seek(int64(current_size), 0); err != nil {
+				log.Fatal(err)
 			}
 		}
 	}
@@ -123,14 +137,15 @@ func parseVarInts(f *os.File) (int, error) {
 
 
 
-func initStorageWriter(dir string) *StorageWriter {
-	file_path := fmt.Sprintf("./data_%d", 0)
+func initStorageWriter(dir string, file_number int) *StorageWriter {
+	file_path := fmt.Sprintf("./%s/data_%d", dir, file_number)
 	f, err := os.OpenFile(file_path, default_storage_write_mode, permission)
 	if err != nil {
 		panic("Failed to create a storage writer")
 	}
 	buf := new(bytes.Buffer)
-	err = binary.Write(buf, binary.BigEndian, default_file_size)
+	fsize := default_file_size - 4
+	err = binary.Write(buf, binary.BigEndian, fsize)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -138,7 +153,11 @@ func initStorageWriter(dir string) *StorageWriter {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return &StorageWriter{ 0, dir, f }
+	err = f.Truncate(int64(default_file_size))
+	if err != nil {
+		log.Fatal(err)
+	}
+	return &StorageWriter{ f }
 }
 
 func ToVarInts [T ~uint32| ~uint64 | ~int32 | ~int64 | ~int] (i T) []byte {
@@ -193,7 +212,7 @@ func (s *StorageWriter) Write(p *Data) bool {
 	*/
 	var fsize uint32 = 0
 	file_size := make([]byte, 4)
-	_, err := s.file.Read(file_size)
+	_, err := s.file.ReadAt(file_size, 0)
 	if err == io.EOF { return false }
 	if err != nil {
 		log.Fatal(err)
@@ -206,15 +225,14 @@ func (s *StorageWriter) Write(p *Data) bool {
 		fmt.Printf("Data size is %d compared to available size %d", p.size, fsize)
 		return false
 	}
-	offset := uint32(len(file_size)) + (default_file_size - fsize)
+	offset := default_file_size - fsize
 	data := ToBytes(p)
-	n, err := s.file.WriteAt(data, int64(offset))
-	fmt.Printf("Write %d bytes of data", n)
+	_, err = s.file.WriteAt(data, int64(offset))
 	if err != nil {
 		log.Fatal(err)
 	}
 	buf := new(bytes.Buffer)
-	new_file_size := fsize + p.size
+	new_file_size := fsize - p.size
 	err = binary.Write(buf, binary.BigEndian, new_file_size)
 	_, err = s.file.WriteAt(buf.Bytes(), 0)
 	if err != nil {
@@ -225,26 +243,32 @@ func (s *StorageWriter) Write(p *Data) bool {
 
 func ToBytes(p *Data) []byte {
 	output := make([]byte, 0)
-	key_length := ToVarInts(len((*p).row_key))
-	for _,v := range(key_length) {
-		output = append(output, v)
+	key_size := len((*p).row_key)
+	payload_length := ToVarInts((*p).size)
+	output = append(output, payload_length...)
+	key_length := ToVarInts(key_size)
+	output = append(output, key_length...)
+	for i := 0; i < key_size; i++{
+		output = append(output, byte((*p).row_key[i]))
 	}
-	for _,v := range(p.cols) {
-		value_length := ToVarInts(len(v))
-		output = append(output, value_length...)
+	for _,v := range p.cols {
+		col_length := ToVarInts(len(v))
+		output = append(output, col_length...)
+		for _, c := range v {
+			output = append(output, byte(c))
+		}
 	}
 	return output
 }
 
 func (s *StorageWriter) Flush() {
 	// flush any pending writes
-	s.i += 1
-	file_path := fmt.Sprintf("%s/data_%d", s.dir, s.i)
-	old_file := s.file
-	f, err := os.OpenFile(file_path, default_storage_write_mode, permission)
-	s.file = f
-	if err != nil {
-		panic("Failed to create a new file for storage writer")
+	defer func() {
+		if err := s.file.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+	if err := s.file.Sync(); err != nil {
+		log.Fatal(err)
 	}
-	old_file.Close()
 }

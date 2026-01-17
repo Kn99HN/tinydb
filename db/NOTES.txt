@@ -1,8 +1,5 @@
-Thoughts:
-- Right now, dir is a constant that we set -> For easier testing, it might be
-better to store it in a struct variable instead.
-- Polish the write path would be benefitial for future dev process.
-- Some thoughts:
--> Implement writing to more than 1 file
--> Then implement the index. Make it a process of: I have this but it's not good
-enough, we need something else
+TODO:
+- Refactor read and write code to be more readable and handle the error better.
+	The code right now is clunky with lots of adhoc error handling
+- Right now, there's no index in the data file. Therefore, for efficient search,
+	it would be best if we have some kind of indexing on the file
