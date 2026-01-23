@@ -90,7 +90,7 @@ func readFromDisk(file_path string) []Record {
 	return records
 }
 
-func makeRecord(id string, name string, year string) Record {
+func makeRecord(name string, id string, year string) Record {
 	return Record{values: map[string]string {
 		"Name": name,
 		"Id": id,
