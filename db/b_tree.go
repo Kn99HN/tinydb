@@ -28,6 +28,10 @@ type Child struct {
 	right TreeNode
 }
 
+func (c Child) String() string {
+	return fmt.Sprintf("{ %s, %d }", c.key, c.value)
+}
+
 type RootNode struct {
 	m int
 	child TreeNode
@@ -43,6 +47,12 @@ type LeafNode struct {
 	m int
 	children []*Child
 	parent TreeNode
+}
+
+func newChild(k string, v uint64, left *TreeNode, right *TreeNode) *Child {
+	return &Child {
+		k, v, left, right,
+	}
 }
 
 func newRootNode(m int) *RootNode {
@@ -78,7 +88,7 @@ func (n *InternalNode) Balance(k string, low TreeNode, high TreeNode) bool {
 	slices.SortFunc(children, func(a,b *Child) int {
 		return strings.Compare(a.key, b.key)
 	})
-	if len(children) >= n.m {
+	if len(children) > n.m {
 		pivot_index := len(children) / 2
 		low_children := children[0: pivot_index]
 		high_children := children[pivot_index:]
@@ -89,6 +99,7 @@ func (n *InternalNode) Balance(k string, low TreeNode, high TreeNode) bool {
 		}
 		return n.parent.Balance(children[pivot_index].key, low_node, high_node)
 	}
+	n.children = children
 	return true
 }
 
@@ -112,7 +123,7 @@ func (n *LeafNode) Insert(k string, v uint64) bool {
 	slices.SortFunc(children, func(a,b *Child) int {
 		return strings.Compare(a.key, b.key)
 	})
-	if len(children) >= n.m {
+	if len(children) > n.m {
 		pivot_index := len(children) / 2
 		low_records := children[0: pivot_index]
 		high_records := children[pivot_index:]
@@ -123,6 +134,7 @@ func (n *LeafNode) Insert(k string, v uint64) bool {
 		}
 		return n.parent.Balance(children[pivot_index].key, low_node, high_node)
 	}
+	n.children = children
 	return true
 }
 
@@ -141,6 +153,7 @@ func (n *LeafNode) Find(k string) (uint64, error) {
 	i, found := slices.BinarySearchFunc(n.children, &Child{k, 0, nil, nil}, func(a, b *Child) int {
 		return strings.Compare(a.key, b.key)
 	})
+	fmt.Printf("Find %v", n.children)
 	if !found {
 		return 0, &NotFoundError{ fmt.Sprintf("No record found for %s",k) }
 	}
