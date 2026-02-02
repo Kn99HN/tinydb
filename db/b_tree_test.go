@@ -6,44 +6,52 @@ import (
 	"strings"
 	"math/rand"
 	"time"
-	//"fmt"
-	//"reflect"
+	"fmt"
+	"reflect"
 )
 
-/*
+
 func TestInsertAndFind(t *testing.T) {
-	root := newRootNode(2)
-	root.Insert("1", 1)
-	root.Insert("2", 2)
+	root := newRootNode(3)
+	root.Insert("1", "1")
+	root.Insert("2", "2")
 
 	actual, _ := root.Find("2")
 
-	if actual != 2 {
+	if actual != "2" {
 		t.Errorf("Expected %v. Actual %v", 2, actual)
 	}
 }
 
+
 func TestInsertAndFindTwoLevels(t *testing.T) {
-	root := newRootNode(2)
-	root.Insert("1", 1)
-	root.Insert("2", 2)
-	root.Insert("3", 3)
+	root := newRootNode(3)
+	root.Insert("1", "1")
+	root.Insert("2", "2")
+	root.Insert("3", "3")
 
 	actual, _ := root.Find("3")
 
-	expected_root := newRootNode(2)
-	c1 := newChild("1", 1, nil, nil)
-	c2 := newChild("2", 2, nil, nil)
-	c3 := newChild("3", 3, nil, nil)
-	left := newLeafNode(2, []*Child{c1}, nil)
-	right := newLeafNode(2, []*Child{c2, c3}, nil)
-	child := newChild("2", 0, left, right)
-	i_node := newInternalNode(2, []*Child{child}, root)
+	expected_root := newRootNode(3)
+	left := newLeafNode(3)
+	left.AddKey("1")
+	left.AddValue("1")
+	right := newLeafNode(3)
+	right.AddKey("2")
+	right.AddValue("2")
+	right.AddKey("3")
+	right.AddValue("3")
+	i_node := newInternalNode(3)
+	i_node.AddKey("2")
+
+	i_node.SetParent(expected_root)
 	left.SetParent(i_node)
 	right.SetParent(i_node)
-	expected_root.child = i_node
+	i_node.AddChild(left)
+	i_node.AddChild(right)
+	expected_root.SetChild(i_node)
 
-	if actual != 3 {
+	if actual != "3" {
 		t.Errorf("Expected %v. Actual %v", 3, actual)
 	}
 
@@ -52,6 +60,7 @@ func TestInsertAndFindTwoLevels(t *testing.T) {
 	}
 }
 
+/*
 func TestInsertAndFindThreeLevels(t *testing.T) {
 	root := newRootNode(2)
 	root.Insert("1", 1)
@@ -124,7 +133,7 @@ func TestInsertAndFindMultipleInternalNodes(t *testing.T) {
 
 func TestBinarySearchLesserOrGreater(t *testing.T) {
 	keys := []string{"a", "c", "e", "g", "i"}
-	actual_index := BinarySearch(keys, "b", 0, len(keys))
+	actual_index, _ := BinarySearch(keys, "b", 0, len(keys), CHILDREN)
 	expected_index := 1
 
 	if actual_index != expected_index {
@@ -134,7 +143,7 @@ func TestBinarySearchLesserOrGreater(t *testing.T) {
 
 func TestBinarySearchEqual(t *testing.T) {
 	keys := []string{"a", "c", "e", "g", "i"}
-	actual_index := BinarySearch(keys, "c", 0, len(keys))
+	actual_index, _ := BinarySearch(keys, "c", 0, len(keys), CHILDREN)
 	expected_index := 2
 
 	if actual_index != expected_index {
@@ -144,7 +153,7 @@ func TestBinarySearchEqual(t *testing.T) {
 
 func TestBinarySearchEdge(t *testing.T) {
 	keys := []string{"a", "c", "e", "g", "i"}
-	actual_index := BinarySearch(keys, "j", 0, len(keys))
+	actual_index, _ := BinarySearch(keys, "j", 0, len(keys), CHILDREN)
 	expected_index := len(keys)
 
 	if actual_index != expected_index {
@@ -153,13 +162,19 @@ func TestBinarySearchEdge(t *testing.T) {
 }
 
 func TestQuickSort(t *testing.T) {
-	keys := generateStringArrays(1, 5)
+	//keys := generateStringArrays(1, 5)
+	keys := []string{"l", "g", "v", "e", "e"}
+	values := generateStringArrays(1, 5)
+	children := []TreeNode{ nil, nil, nil, nil, nil, nil }
 	expected_sorted_keys := make([]string, len(keys))
-	copy(expected_sorted_keys, keys)
+	for i, v := range(keys) {
+		expected_sorted_keys[i] = v
+	}
 	slices.SortFunc(expected_sorted_keys, func(a, b string) int {
 			return strings.Compare(strings.ToLower(a), strings.ToLower(b))
 	})
-	QuickSort(keys)
+	fmt.Printf("Original %v\n", keys)
+	QuickSort(keys, values, children)
 
 	if !slices.Equal(expected_sorted_keys, keys) {
 		t.Errorf("Expected %v. Actual %v", expected_sorted_keys, keys)
@@ -168,12 +183,14 @@ func TestQuickSort(t *testing.T) {
 
 func TestQuickSortTwoItems(t *testing.T) {
 	keys := generateStringArrays(1, 2)
+	values := generateStringArrays(1, 2)
+	children := []TreeNode{ nil, nil, nil }
 	expected_sorted_keys := make([]string, len(keys))
 	copy(expected_sorted_keys, keys)
 	slices.SortFunc(expected_sorted_keys, func(a, b string) int {
 			return strings.Compare(strings.ToLower(a), strings.ToLower(b))
 	})
-	QuickSort(keys)
+	QuickSort(keys, values, children)
 
 	if !slices.Equal(expected_sorted_keys, keys) {
 		t.Errorf("Expected %v. Actual %v", expected_sorted_keys, keys)

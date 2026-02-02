@@ -6,12 +6,23 @@ import (
 	"strings"
 )
 
+type SearchMode int
+
+const (
+	VALUE SearchMode = iota
+	CHILDREN
+)
+
 type TreeNode interface {
-	//Insert(k string, v uint64) bool
-	//Find(k string) (uint64, error)
-	//Balance(k string, low TreeNode, high TreeNode) bool
+	Insert(k string, v string) bool
+	Find(k string) (string, error)
+	Balance() bool
 	SetParent(p TreeNode)
+	SetChild(p TreeNode)
 	String() string
+	AddKey(k string)
+	AddValue(v string)
+	AddChild(c TreeNode)
 	//Delete(k string) bool
 }
 
@@ -32,6 +43,10 @@ type Child struct {
 
 func (c Child) String() string {
 	return fmt.Sprintf("{ %s, %d, %s, %s }", c.key, c.value, c.left, c.right)
+}
+
+func (r RootNode) String() string {
+	return r.child.String()
 }
 
 func (t InternalNode) String() string {
@@ -84,15 +99,44 @@ func newRootNode(m int) *RootNode {
 
 func newInternalNode(m int) TreeNode {
 	return &InternalNode {
-		m, make([]TreeNode, m), make([]string, m - 1), nil,
+		m, make([]TreeNode, 0), make([]string, 0), nil,
 	}
 }
 
 func newLeafNode(m int) TreeNode {
 	return &LeafNode {
-		m, nil, make([]string, m - 1), make([]string, m - 1),
+		m, nil, make([]string, 0), make([]string, 0),
 	}
 }
+
+func (n *RootNode) SetChild(c TreeNode) {
+	n.child = c
+}
+func (n *LeafNode) SetChild(c TreeNode) {}
+func (n *InternalNode) SetChild(c TreeNode) {}
+
+func (n *RootNode) AddKey(k string) {}
+func (n *LeafNode) AddKey(k string) {
+	n.keys = append(n.keys, k)
+}
+func (n *InternalNode) AddKey(k string) {
+	n.keys = append(n.keys, k)
+}
+
+func (n *RootNode) AddValue(v string) {}
+func (n *LeafNode) AddValue(v string) {
+	n.values = append(n.values, v)
+}
+func (n *InternalNode) AddValue(v string) {}
+
+
+func (n *RootNode) AddChild(c TreeNode) {}
+func (n *LeafNode) AddChild(c TreeNode) {}
+func (n *InternalNode) AddChild(c TreeNode) {
+	n.children = append(n.children, c)
+}
+
+
 
 func (n *RootNode) SetParent(p TreeNode) {}
 
@@ -104,7 +148,7 @@ func (n *InternalNode) SetParent(p TreeNode) {
 	n.parent = p
 }
 
-func BinarySearch(keys []string, k string, low int, high int) int {
+func BinarySearch(keys []string, k string, low int, high int, mode SearchMode) (int, bool) {
 	mid := (high + low) / 2
 	if mid < 0 || mid > len(keys) {
 		mid = len(keys) - 1
@@ -113,21 +157,24 @@ func BinarySearch(keys []string, k string, low int, high int) int {
 	res := strings.Compare(pivot, k)
 	if (high - low) == 1 {
 		if res <= 0 {
-			return mid + 1
+			if mode == CHILDREN {
+				return mid + 1, res == 0
+			}
+			return mid, res == 0
 		}
-		return mid
+		return mid, false
 	}
 	if res <= 0 {
-		return BinarySearch(keys, k, mid, high)
+		return BinarySearch(keys, k, mid, high, mode)
 	}
-	return BinarySearch(keys, k, low, mid)
+	return BinarySearch(keys, k, low, mid, mode)
 }
 
-func QuickSort(keys[] string) {
-	QuickSortHelper(keys, 0, len(keys) - 1)
+func QuickSort(keys[] string, values []string, children []TreeNode) {
+	QuickSortHelper(keys, values, children, 0, len(keys) - 1)
 }
 
-func QuickSortHelper(keys[] string, low int, high int) {
+func QuickSortHelper(keys[] string, values []string, children []TreeNode, low int, high int) {
 	if (high - low) < 1 { return }
 	partition_index := (low + high) / 2
 	i := low
@@ -142,6 +189,19 @@ func QuickSortHelper(keys[] string, low int, high int) {
 			tmp := keys[j]
 			keys[j] = keys[i]
 			keys[i] = tmp
+			// swap values
+			if values != nil {
+				tmp_val := values[j]
+				values[j] = values[i]
+				values[i] = tmp_val
+			}
+			// swap children
+			if children != nil {
+				tmp_child_1 := children[j]
+				tmp_child_2 := children[j + 1]
+				children[i] = tmp_child_1
+				children[i + 1] = tmp_child_2
+			}
 			if i == partition_index {
 				partition_index = j
 			}
@@ -154,29 +214,30 @@ func QuickSortHelper(keys[] string, low int, high int) {
 		if !ltp { i++ }
 		if !gtp { j--}
 	}
-	QuickSortHelper(keys, low, partition_index)
-	QuickSortHelper(keys, partition_index + 1, high)
+	QuickSortHelper(keys, values, children, low, partition_index)
+	QuickSortHelper(keys, values, children, partition_index + 1, high)
 }
 
-/*
-func (n *RootNode) Balance(k string, low TreeNode, high TreeNode) bool {
-	n.child = newInternalNode(n.m, make([]*Child, 0), n)
-	return n.child.Balance(k, low, high)
+
+
+func (n *RootNode) Balance() bool {
+	return true
 }
 
-func (n *RootNode) Find(k string) (uint64, error) {
+func (n *RootNode) Find(k string) (string, error) {
 	return n.child.Find(k)
 }
 
-func (n *RootNode) Insert(k string, v uint64) bool {
+func (n *RootNode) Insert(k string, v string) bool {
 	if n.child != nil {
 		return n.child.Insert(k, v)
 	}
-	children := make([]*Child, 0)
-	n.child = newLeafNode(n.m, children, n)
+	n.child = newLeafNode(n.m)
+	n.child.SetParent(n)
 	return n.child.Insert(k, v)
 }
 
+/*
 func (n *InternalNode) Balance(k string, low TreeNode, high TreeNode) bool {
 	children := append(n.children, &Child{ k, 0, low, high})
 	slices.SortFunc(children, func(a,b *Child) int {
@@ -223,50 +284,62 @@ func (n *InternalNode) Insert(k string, v uint64) bool {
 		return n.children[i].left.Insert(k, v)
 	}
 	return n.children[i].right.Insert(k, v)
-}
-
-func (n *LeafNode) Balance(k string, low TreeNode, high TreeNode) bool {
-	return true
-}
-
-func (n *LeafNode) Insert(k string, v uint64) bool {
-	children := append(n.children, &Child {k, v, nil, nil })
-	slices.SortFunc(children, func(a,b *Child) int {
-		return strings.Compare(a.key, b.key)
-	})
-	if len(children) > n.m {
-		pivot_index := len(children) / 2
-		low_records := children[0: pivot_index]
-		high_records := children[pivot_index:]
-		low_node := newLeafNode(n.m, low_records, nil)
-		high_node := newLeafNode(n.m, high_records, nil)
-		return n.parent.Balance(children[pivot_index].key, low_node, high_node)
-	}
-	n.children = children
-	return true
-}
-
-func (n *InternalNode) Find(k string) (uint64, error) {
-	i, found := slices.BinarySearchFunc(n.children, &Child {k, 0, nil, nil }, func(a, b *Child) int {
-		return strings.Compare(a.key, b.key)
-	})
-	if !found && i >= len(n.children) {
-		i = len(n.children) - 1
-	}
-	pivot_key := n.children[i].key
-	if strings.Compare(k, pivot_key) < 0 {
-		return n.children[i].left.Find(k)
-	}
-	return n.children[i].right.Find(k)
-}
-
-func (n *LeafNode) Find(k string) (uint64, error) {
-	i, found := slices.BinarySearchFunc(n.children, &Child{k, 0, nil, nil}, func(a, b *Child) int {
-		return strings.Compare(a.key, b.key)
-	})
-	fmt.Printf("Find %v\n", n.children)
-	if !found {
-		return 0, &NotFoundError{ fmt.Sprintf("No record found for %s",k) }
-	}
-	return n.children[i].value, nil
 }*/
+
+func (n *LeafNode) Balance() bool {
+	QuickSort(n.keys, n.values, nil)
+	left_node := newLeafNode(n.m)
+	right_node := newLeafNode(n.m)
+	mid := len(n.keys) / 2
+	for i := 0; i < mid; i++ {
+		left_node.AddKey(n.keys[i])
+		left_node.AddValue(n.values[i])
+	}
+	for i := mid; i < len(n.keys); i++ {
+		right_node.AddKey(n.keys[i])
+		right_node.AddValue(n.values[i])
+	}
+	internal_node := newInternalNode(n.m)
+	internal_node.AddKey(n.keys[mid])
+	internal_node.AddChild(left_node)
+	internal_node.AddChild(right_node)
+	internal_node.SetParent(n.parent)
+	n.parent.SetChild(internal_node)
+	left_node.SetParent(internal_node)
+	right_node.SetParent(internal_node)
+	return true
+}
+
+func (n *InternalNode) Balance() bool {
+	return true
+}
+
+func (n *InternalNode) Insert(k string, v string) bool {
+	return true
+}
+
+func (n *LeafNode) Insert(k string, v string) bool {
+	if (len(n.keys) + 1) >= n.m {
+		n.keys = append(n.keys, k)
+		n.values = append(n.values, v)
+		n.Balance()
+		n.SetParent(nil)
+	}
+	n.keys = append(n.keys, k)
+	n.values = append(n.values, v)
+	QuickSort(n.keys, n.values, nil)
+	return true
+}
+
+func (n *InternalNode) Find(k string) (string, error) {
+	i, _ := BinarySearch(n.keys, k, 0, len(n.keys), CHILDREN)
+	return n.children[i].Find(k)
+}
+
+func (n *LeafNode) Find(k string) (string, error) {
+	i, found := BinarySearch(n.keys, k, 0, len(n.keys), VALUE)
+	if !found {
+		return "", &NotFoundError{ fmt.Sprintf("No record found for %s",k) }
+	}
+	return n.values[i], nil
+}
