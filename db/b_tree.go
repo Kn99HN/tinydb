@@ -176,6 +176,9 @@ func QuickSort(keys[] string, values []string, children []TreeNode) {
 
 func QuickSortHelper(keys[] string, values []string, children []TreeNode, low int, high int) {
 	if (high - low) < 1 { return }
+	if (high - low) == 1 && strings.Compare(keys[high], keys[low]) == 0 {
+		return
+	}
 	partition_index := (low + high) / 2
 	i := low
 	j := high
@@ -204,8 +207,7 @@ func QuickSortHelper(keys[] string, values []string, children []TreeNode, low in
 			}
 			if i == partition_index {
 				partition_index = j
-			}
-			if j == partition_index {
+			} else if j == partition_index {
 				partition_index = i
 			}
 			i++

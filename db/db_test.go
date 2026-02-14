@@ -214,8 +214,6 @@ func TestCountNodeCompositeKey(t *testing.T) {
 
 }
 
-
-// it failed previously due to the type for Args are different
 func TestGenerateTree(t *testing.T) {
 	b := ` {"head": { "name": "SCAN", "args": ["movies"], "child": null } }`
 	s := &Node{ "SCAN", []interface{}{"movies"}, nil }
