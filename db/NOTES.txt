@@ -3,3 +3,4 @@ TODO:
 	The code right now is clunky with lots of adhoc error handling
 - Right now, there's no index in the data file. Therefore, for efficient search,
 	it would be best if we have some kind of indexing on the file
+	- Call Balance for InternalNode when Child node balances

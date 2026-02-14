@@ -18,12 +18,15 @@ type TreeNode interface {
 	Find(k string) (string, error)
 	Balance() bool
 	SetParent(p TreeNode)
-	SetChild(p TreeNode)
 	String() string
 	AddKey(k string)
 	AddValue(v string)
 	AddChild(c TreeNode)
-	//Delete(k string) bool
+	UpsertKeys([]string)
+	UpsertChildren([]TreeNode)
+	UpsertValues([]string)
+	NeedBalance() bool
+	IsRootNode() bool
 }
 
 type NotFoundError struct {
@@ -34,23 +37,17 @@ func (e *NotFoundError) Error() string {
 	return fmt.Sprintf("%s", e.message)
 }
 
-type Child struct {
-	key string
-	value uint64
-	left TreeNode
-	right TreeNode
-}
-
-func (c Child) String() string {
-	return fmt.Sprintf("{ %s, %d, %s, %s }", c.key, c.value, c.left, c.right)
-}
-
 func (r RootNode) String() string {
 	return r.child.String()
 }
 
 func (t InternalNode) String() string {
-	child_string := "{"
+	child_string := "I-node {"
+	for _, c := range(t.keys) {
+		child_string += fmt.Sprintf("%s,", c)
+	}
+	child_string += "}, {"
+
 	for _, c := range(t.children) {
 		child_string += fmt.Sprintf("%s,", c)
 	}
@@ -59,7 +56,7 @@ func (t InternalNode) String() string {
 }
 
 func (l LeafNode) String() string {
-	child_string := "{"
+	child_string := "L-node {"
 	for i, v := range(l.keys) {
 		child_string += fmt.Sprintf("(%s,%s) ", v, l.values[i])
 	}
@@ -87,12 +84,6 @@ type LeafNode struct {
 	values []string
 }
 
-func newChild(k string, v uint64, left TreeNode, right TreeNode) *Child {
-	return &Child {
-		k, v, left, right,
-	}
-}
-
 func newRootNode(m int) *RootNode {
 	return &RootNode {m, nil}
 }
@@ -109,11 +100,9 @@ func newLeafNode(m int) TreeNode {
 	}
 }
 
-func (n *RootNode) SetChild(c TreeNode) {
-	n.child = c
-}
-func (n *LeafNode) SetChild(c TreeNode) {}
-func (n *InternalNode) SetChild(c TreeNode) {}
+func (n *RootNode) IsRootNode() bool { return true }
+func (n *LeafNode) IsRootNode() bool { return false }
+func (n *InternalNode) IsRootNode() bool { return false }
 
 func (n *RootNode) AddKey(k string) {}
 func (n *LeafNode) AddKey(k string) {
@@ -123,6 +112,40 @@ func (n *InternalNode) AddKey(k string) {
 	n.keys = append(n.keys, k)
 }
 
+func (n *RootNode) UpsertKeys(k []string) {}
+func (n *LeafNode) UpsertKeys(k []string) {
+	n.keys = make([]string, len(k))
+	copy(n.keys, k)
+}
+func (n *InternalNode) UpsertKeys(k []string) {
+	n.keys = make([]string, len(k))
+	copy(n.keys, k)
+}
+
+func (n *RootNode) UpsertValues(k []string) {}
+func (n *LeafNode) UpsertValues(k []string) {
+	n.values = make([]string, len(k))
+	copy(n.values, k)
+}
+func (n *InternalNode) UpsertValues(k []string) {
+}
+
+func (n *RootNode) UpsertChildren(c []TreeNode) {}
+func (n *LeafNode) UpsertChildren(c []TreeNode) {
+}
+func (n *InternalNode) UpsertChildren(c []TreeNode) {
+	n.children = make([]TreeNode, len(c))
+	copy(n.children, c)
+}
+
+func (n *RootNode) NeedBalance() bool { return false }
+func (n *LeafNode) NeedBalance() bool {
+	return len(n.keys) == n.m
+}
+func (n *InternalNode) NeedBalance() bool {
+	return len(n.keys) == n.m
+}
+
 func (n *RootNode) AddValue(v string) {}
 func (n *LeafNode) AddValue(v string) {
 	n.values = append(n.values, v)
@@ -130,7 +153,9 @@ func (n *LeafNode) AddValue(v string) {
 func (n *InternalNode) AddValue(v string) {}
 
 
-func (n *RootNode) AddChild(c TreeNode) {}
+func (n *RootNode) AddChild(c TreeNode) {
+	n.child = c
+}
 func (n *LeafNode) AddChild(c TreeNode) {}
 func (n *InternalNode) AddChild(c TreeNode) {
 	n.children = append(n.children, c)
@@ -290,34 +315,82 @@ func (n *InternalNode) Insert(k string, v uint64) bool {
 
 func (n *LeafNode) Balance() bool {
 	QuickSort(n.keys, n.values, nil)
-	left_node := newLeafNode(n.m)
-	right_node := newLeafNode(n.m)
 	mid := len(n.keys) / 2
-	for i := 0; i < mid; i++ {
-		left_node.AddKey(n.keys[i])
-		left_node.AddValue(n.values[i])
+	mid_key := n.keys[mid]
+	left_keys := n.keys[0:mid]
+	left_values := n.values[0:mid]
+	right_keys := n.keys[mid:]
+	right_values := n.values[mid:]
+	n.UpsertKeys(left_keys)
+	n.UpsertValues(left_values)
+
+	right_node := newLeafNode(n.m)
+	right_node.UpsertKeys(right_keys)
+	right_node.UpsertValues(right_values)
+
+	var internal_node TreeNode
+	if n.parent != nil && !n.parent.IsRootNode() {
+		internal_node = n.parent
+	} else {
+		internal_node = newInternalNode(n.m)
+		internal_node.SetParent(n.parent)
+		n.parent.AddChild(internal_node)
+		internal_node.AddChild(n)
+		n.SetParent(internal_node)
 	}
-	for i := mid; i < len(n.keys); i++ {
-		right_node.AddKey(n.keys[i])
-		right_node.AddValue(n.values[i])
-	}
-	internal_node := newInternalNode(n.m)
-	internal_node.AddKey(n.keys[mid])
-	internal_node.AddChild(left_node)
+	internal_node.AddKey(mid_key)
 	internal_node.AddChild(right_node)
-	internal_node.SetParent(n.parent)
-	n.parent.SetChild(internal_node)
-	left_node.SetParent(internal_node)
 	right_node.SetParent(internal_node)
+
+	if n.parent != nil && n.parent.NeedBalance() {
+		n.parent.Balance()
+	}
 	return true
 }
 
 func (n *InternalNode) Balance() bool {
+	QuickSort(n.keys, nil, n.children)
+	mid := len(n.keys) / 2
+	mid_key := n.keys[mid]
+	left_keys := n.keys[0:mid]
+	left_children := n.children[0:mid+1]
+	right_keys := n.keys[mid+1:]
+	right_children := n.children[mid+1:]
+
+	right_node := newInternalNode(n.m)
+	right_node.UpsertKeys(right_keys)
+	right_node.UpsertChildren(right_children)
+	for _, v := range(right_children) {
+		v.SetParent(right_node)
+	}
+
+	// This modifies the underlying array of the slices
+	n.UpsertKeys(left_keys)
+	n.UpsertChildren(left_children)
+
+	var internal_node TreeNode
+	if n.parent != nil && !n.parent.IsRootNode() {
+		internal_node = n.parent
+	} else {
+		internal_node = newInternalNode(n.m)
+		internal_node.SetParent(n.parent)
+		n.parent.AddChild(internal_node)
+		internal_node.AddChild(n)
+		n.SetParent(internal_node)
+	}
+	internal_node.AddKey(mid_key)
+	internal_node.AddChild(right_node)
+	right_node.SetParent(internal_node)
+
+	if n.parent != nil && n.parent.NeedBalance() {
+		n.parent.Balance()
+	}
 	return true
 }
 
 func (n *InternalNode) Insert(k string, v string) bool {
-	return true
+	i, _ := BinarySearch(n.keys, k, 0, len(n.keys), CHILDREN)
+	return n.children[i].Insert(k, v)
 }
 
 func (n *LeafNode) Insert(k string, v string) bool {
@@ -325,7 +398,7 @@ func (n *LeafNode) Insert(k string, v string) bool {
 		n.keys = append(n.keys, k)
 		n.values = append(n.values, v)
 		n.Balance()
-		n.SetParent(nil)
+		return true
 	}
 	n.keys = append(n.keys, k)
 	n.values = append(n.values, v)

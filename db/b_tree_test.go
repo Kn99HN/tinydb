@@ -48,87 +48,77 @@ func TestInsertAndFindTwoLevels(t *testing.T) {
 	right.SetParent(i_node)
 	i_node.AddChild(left)
 	i_node.AddChild(right)
-	expected_root.SetChild(i_node)
+	expected_root.AddChild(i_node)
 
 	if actual != "3" {
 		t.Errorf("Expected %v. Actual %v", 3, actual)
 	}
 
 	if !reflect.DeepEqual(root, expected_root) {
-		t.Errorf("Expected %v. Actual %v", root, expected_root)
+		t.Errorf("Expected %v. Actual %v", expected_root, root)
 	}
 }
 
-/*
+
 func TestInsertAndFindThreeLevels(t *testing.T) {
-	root := newRootNode(2)
-	root.Insert("1", 1)
-	root.Insert("2", 2)
-	root.Insert("3", 3)
-	root.Insert("4", 4)
+	root := newRootNode(3)
+	root.Insert("1", "1")
+	root.Insert("2", "2")
+	root.Insert("3", "3")
+	root.Insert("4", "4")
+	root.Insert("5", "5")
 
 	actual, _ := root.Find("2")
 
-	expected_root := newRootNode(2)
-	c1 := newChild("1", 1, nil, nil)
-	c2 := newChild("2", 2, nil, nil)
-	c3 := newChild("3", 3, nil, nil)
-	c4 := newChild("4", 4, nil, nil)
-	l1 := newLeafNode(2, []*Child{c1}, nil)
-	l2 := newLeafNode(2, []*Child{c2}, nil)
-	l3 := newLeafNode(2, []*Child{c3, c4}, nil)
-	i1 := newChild("2", 0, l1, l2)
-	i2 := newChild("3", 0, l2, l3)
-	i_node := newInternalNode(2, []*Child{i1, i2}, root)
-	l1.SetParent(i_node)
-	l2.SetParent(i_node)
-	l3.SetParent(i_node)
-	expected_root.child = i_node
+	expected_root := newRootNode(3)
+	c1 := newLeafNode(3)
+	c1.AddKey("1")
+	c1.AddValue("1")
+	c2 := newLeafNode(3)
+	c2.AddKey("2")
+	c2.AddValue("2")
+	c3 := newLeafNode(3)
+	c3.AddKey("3")
+	c3.AddValue("3")
+	c4 := newLeafNode(3)
+	c4.AddKey("4")
+	c4.AddValue("4")
+	c4.AddKey("5")
+	c4.AddValue("5")
 
-	if actual != 2 {
+
+	i2 := newInternalNode(3)
+	i2.AddKey("2")
+	i2.AddChild(c1)
+	c1.SetParent(i2)
+	i2.AddChild(c2)
+	c2.SetParent(i2)
+	
+	i2_2 := newInternalNode(3)
+	i2_2.AddKey("4")
+	i2_2.AddChild(c3)
+	c3.SetParent(i2_2)
+	i2_2.AddChild(c4)
+	c4.SetParent(i2_2)
+
+	i1 := newInternalNode(3)
+	i1.AddKey("3")
+	i1.AddChild(i2)
+	i1.AddChild(i2_2)
+	i2.SetParent(i1)
+	i2_2.SetParent(i1)
+
+	i1.SetParent(expected_root)
+	expected_root.AddChild(i1)
+
+	if actual != "2" {
 		t.Errorf("Expected %v. Actual %v", 2, actual)
 	}
 
 	if !reflect.DeepEqual(root, expected_root) {
-		t.Errorf("Expected %v. Actual %v", root, expected_root)
+		t.Errorf("Expected %v. Actual %v", expected_root, root)
 	}
 }
-
-func TestInsertAndFindMultipleInternalNodes(t *testing.T) {
-	root := newRootNode(2)
-	root.Insert("1", 1)
-	root.Insert("2", 2)
-	root.Insert("3", 3)
-	root.Insert("4", 4)
-	root.Insert("5", 5)
-
-	actual, _ := root.Find("4")
-
-	expected_root := newRootNode(2)
-	c1 := newChild("1", 1, nil, nil)
-	c2 := newChild("2", 2, nil, nil)
-	c3 := newChild("3", 3, nil, nil)
-	c4 := newChild("4", 4, nil, nil)
-	//c5 := newChild("5", 4, nil, nil)
-	l1 := newLeafNode(2, []*Child{c1}, nil)
-	l2 := newLeafNode(2, []*Child{c2}, nil)
-	l3 := newLeafNode(2, []*Child{c3, c4}, nil)
-	i1 := newChild("2", 0, l1, l2)
-	i2 := newChild("3", 0, l2, l3)
-	i_node := newInternalNode(2, []*Child{i1, i2}, root)
-	l1.SetParent(i_node)
-	l2.SetParent(i_node)
-	l3.SetParent(i_node)
-	expected_root.child = i_node
-
-	if actual != 4 {
-		t.Errorf("Expected %v. Actual %v", 2, actual)
-	}
-
-	if !reflect.DeepEqual(root, expected_root) {
-		t.Errorf("Expected %v. Actual %v", root, expected_root)
-	}
-}*/
 
 func TestBinarySearchLesserOrGreater(t *testing.T) {
 	keys := []string{"a", "c", "e", "g", "i"}
