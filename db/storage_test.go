@@ -84,9 +84,37 @@ func TestWriteMultipleRecordsReadSingleRecord(t *testing.T) {
 	wr.Flush()
 
 	r := initStorageReader(dir, file_number)
-	actual_data := r.Read(d2.row_key)
-	if !reflect.DeepEqual(d2, actual_data) {
-		t.Errorf("Expected %v. Actual %v", d2, actual_data)
+	actual_data := r.Read(d1.row_key)
+	if !reflect.DeepEqual(d1, actual_data) {
+		t.Errorf("Expected %v. Actual %v", d1, actual_data)
+	}
+}
+
+func TestWriteMultipleRecordsReadRows(t *testing.T) {
+	file_number := 0
+	wr := initStorageWriter(dir, file_number)
+	d1 := generateRandomData(2, 2)
+	d2 := generateRandomData(2, 2)
+	succeeded := wr.Write(d1)
+	if !succeeded {
+		t.Errorf("Failed to write data")
+	}
+	succeeded = wr.Write(d2)
+	if !succeeded {
+		t.Errorf("Failed to write data")
+	}
+
+	wr.Flush()
+
+	r := initStorageReader(dir, file_number)
+	r1, offset_1 := r.ReadRow(0)
+	if !reflect.DeepEqual(d1, r1) {
+		t.Errorf("Expected %v. Actual %v", d1, r1)
+	}
+
+	r2, _ := r.ReadRow(offset_1)
+	if !reflect.DeepEqual(d2, r2) {
+		t.Errorf("Expected %v. Actual %v", d2, r2)
 	}
 }
 

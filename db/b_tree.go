@@ -264,55 +264,6 @@ func (n *RootNode) Insert(k string, v string) bool {
 	return n.child.Insert(k, v)
 }
 
-/*
-func (n *InternalNode) Balance(k string, low TreeNode, high TreeNode) bool {
-	children := append(n.children, &Child{ k, 0, low, high})
-	slices.SortFunc(children, func(a,b *Child) int {
-		return strings.Compare(a.key, b.key)
-	})
-	i, _ := slices.BinarySearchFunc(children, &Child{k, 0, nil, nil}, 
-		func(a,b *Child) int { return strings.Compare(a.key, b.key) })
-	if i > 0 && i < (len(children) - 1) {
-		children[i - 1].right = children[i].left
-		children[i + 1].left = children[i].right
-	}
-	if i == 0  && len(children) > 1 {
-		children[i + 1].left = children[i].right
-	}
-	if i == len(children) - 1  && len(children) > 1 {
-		children[i - 1].right = children[i].left
-	}
-	if len(children) > n.m {
-		pivot_index := len(children) / 2
-		low_children := children[0: pivot_index]
-		high_children := children[pivot_index:]
-		low_node := newInternalNode(n.m, low_children, n.parent)
-		high_node := newInternalNode(n.m, high_children, n.parent)
-		if n.parent == nil {
-			n.parent = newRootNode(n.m)
-		}
-		return n.parent.Balance(children[pivot_index].key, low_node, high_node)
-	}
-	low.SetParent(n)
-	high.SetParent(n)
-	n.children = children
-	return true
-}
-
-func (n *InternalNode) Insert(k string, v uint64) bool {
-	i, _ := slices.BinarySearchFunc(n.keys, k, func(a, b *Child) int {
-		return strings.Compare(a.key, b.key)
-	})
-	if i >= len(n.children) {
-		i = len(n.children) - 1
-	}
-	pivot_key := n.children[i].key
-	if strings.Compare(k, pivot_key) <= 0 {
-		return n.children[i].left.Insert(k, v)
-	}
-	return n.children[i].right.Insert(k, v)
-}*/
-
 func (n *LeafNode) Balance() bool {
 	QuickSort(n.keys, n.values, nil)
 	mid := len(n.keys) / 2

@@ -44,7 +44,6 @@ type DataIndex struct {
 }
 
 func initStorageReader(dir string, file_number int) *StorageReader {
-	// a single file for now
 	file_path := fmt.Sprintf("./%s/data_%d", dir, file_number)
 	f, err := os.Open(file_path)
 	if err != nil {
@@ -52,6 +51,43 @@ func initStorageReader(dir string, file_number int) *StorageReader {
 	}
 	return &StorageReader{ f }
 }
+
+func (r *StorageReader) ReadRow(offset int64) (*Data, int64) {
+	_, err := r.file.Seek(offset + 4, 0)
+	if err != nil {
+		log.Fatal(err)
+	}
+	d := &Data{}
+	d.cols = make([]string, 0)
+	payload_size, varint_err := parseVarInts(r.file)
+	offset += int64(payload_size)
+	if varint_err == io.EOF {
+		return nil, offset
+	}
+	key_size, varint_err := parseVarInts(r.file)
+	if varint_err == io.EOF { 
+		return nil, offset
+	}
+	key, string_err := parseString(r.file, key_size)
+	if string_err == io.EOF {
+		return nil, offset
+	}
+	max_cols_size := payload_size - key_size
+	current_cols_size := 0
+	d.row_key = key
+	d.size = uint32(payload_size)
+	for current_cols_size < max_cols_size {
+		col_size, varint_err := parseVarInts(r.file)
+		current_cols_size += col_size
+		if varint_err == io.EOF { break }
+		col_val, string_err := parseString(r.file, col_size)
+		if string_err == io.EOF { break }
+		d.cols = append(d.cols, col_val)
+	}
+	offset += int64(max_cols_size)
+	return d, offset
+}
+
 
 func (r *StorageReader) Read(s string) *Data {
 	_, err := r.file.Seek(0, 0)
@@ -232,7 +268,7 @@ func (s *StorageWriter) Write(p *Data) bool {
 		log.Fatal(err)
 	}
 	buf := new(bytes.Buffer)
-	new_file_size := fsize - p.size
+	new_file_size := fsize - uint32(len(data))
 	err = binary.Write(buf, binary.BigEndian, new_file_size)
 	_, err = s.file.WriteAt(buf.Bytes(), 0)
 	if err != nil {
