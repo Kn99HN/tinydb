@@ -13,9 +13,18 @@ const default_storage_write_mode = os.O_CREATE | os.O_RDWR
 const permission = 0750
 const default_file_size uint32 = 1024
 
+type Column struct {
+	name string
+	col string
+}
+
+func (c Column) String() string {
+	return fmt.Sprintf("%s:%s", c.name, c.col)
+}
+
 type Data struct {
 	row_key string
-	cols []string
+	cols []Column
 	size uint32
 }
 
@@ -53,19 +62,21 @@ func initStorageReader(dir string, file_number int) *StorageReader {
 }
 
 func (r *StorageReader) ReadRow(offset int64) (*Data, int64) {
-	_, err := r.file.Seek(offset + 4, 0)
+	rd_offset := offset + 4
+	_, err := r.file.Seek(rd_offset, 0)
 	if err != nil {
 		log.Fatal(err)
 	}
 	d := &Data{}
-	d.cols = make([]string, 0)
-	payload_size, varint_err := parseVarInts(r.file)
-	offset += int64(payload_size)
+	d.cols = make([]Column, 0)
+	payload_size, p_n, varint_err := parseVarInts(r.file)
+	offset += int64(payload_size) + int64(p_n)
 	if varint_err == io.EOF {
 		return nil, offset
 	}
-	key_size, varint_err := parseVarInts(r.file)
-	if varint_err == io.EOF { 
+	key_size, k_n, varint_err := parseVarInts(r.file)
+	payload_size -= k_n
+	if varint_err == io.EOF {
 		return nil, offset
 	}
 	key, string_err := parseString(r.file, key_size)
@@ -75,16 +86,22 @@ func (r *StorageReader) ReadRow(offset int64) (*Data, int64) {
 	max_cols_size := payload_size - key_size
 	current_cols_size := 0
 	d.row_key = key
-	d.size = uint32(payload_size)
 	for current_cols_size < max_cols_size {
-		col_size, varint_err := parseVarInts(r.file)
-		current_cols_size += col_size
+		column_name_sz, cname_n, varint_err := parseVarInts(r.file)
+		payload_size -= cname_n
 		if varint_err == io.EOF { break }
-		col_val, string_err := parseString(r.file, col_size)
+		column_name, string_err := parseString(r.file, column_name_sz)
 		if string_err == io.EOF { break }
-		d.cols = append(d.cols, col_val)
+
+		col_sz, c_n, varint_err := parseVarInts(r.file)
+		payload_size -= c_n
+		if varint_err == io.EOF { break }
+		col_val, string_err := parseString(r.file, col_sz)
+		if string_err == io.EOF { break }
+		d.cols = append(d.cols, Column { column_name, col_val })
+		current_cols_size += cname_n + len(column_name) + c_n + len(col_val)
 	}
-	offset += int64(max_cols_size)
+	d.size = uint32(payload_size)
 	return d, offset
 }
 
@@ -107,28 +124,35 @@ func (r *StorageReader) Read(s string) *Data {
 	max_size_to_read := default_file_size - free_space
 	var current_size uint32 = 4
 	d := &Data{}
-	d.cols = make([]string, 0)
+	d.cols = make([]Column, 0)
 	for current_size < max_size_to_read {
-		payload_size, varint_err := parseVarInts(r.file)
-		current_size += uint32(payload_size)
+		payload_size, p_n, varint_err := parseVarInts(r.file)
+		current_size += uint32(payload_size) + uint32(p_n)
 		if varint_err == io.EOF { break }
-		key_size, varint_err := parseVarInts(r.file)
+		key_size, k_n, varint_err := parseVarInts(r.file)
 		if varint_err == io.EOF { break }
 		key, string_err := parseString(r.file, key_size)
 		if string_err == io.EOF { break }
 		if key == s {
-			max_cols_size := payload_size - key_size
+			max_cols_size := payload_size - (key_size + k_n)
+			payload_size -= k_n
 			current_cols_size := 0
 			d.row_key = key
-			d.size = uint32(payload_size)
 			for current_cols_size < max_cols_size {
-				col_size, varint_err := parseVarInts(r.file)
-				current_cols_size += col_size
+				column_name_sz, cname_n, varint_err := parseVarInts(r.file)
+				if varint_err == io.EOF { break }
+				col_name, string_err := parseString(r.file, column_name_sz)
+				if string_err == io.EOF { break }
+
+				col_size, c_n, varint_err := parseVarInts(r.file)
 				if varint_err == io.EOF { break }
 				col_val, string_err := parseString(r.file, col_size)
 				if string_err == io.EOF { break }
-				d.cols = append(d.cols, col_val)
+				d.cols = append(d.cols, Column { col_name, col_val })
+				current_cols_size += cname_n + col_size + c_n + column_name_sz
+				payload_size = payload_size - cname_n - c_n
 			}
+			d.size = uint32(payload_size)
 		} else {
 			if _, err := r.file.Seek(int64(current_size), 0); err != nil {
 				log.Fatal(err)
@@ -153,22 +177,24 @@ func parseString(f *os.File, str_length int) (string, error) {
 	return string(result), err
 }
 
-func parseVarInts(f *os.File) (int, error) {
+func parseVarInts(f *os.File) (int, int, error) {
  continuation := true
  val := 0
  var err error = nil
+ n := 0
  for continuation {
  	b := make([]byte, 1)
  	_, err = f.Read(b)
 	if err != nil && err != io.EOF {
-		return 0, err
+		return 0, 0, err
 	}
+	n++
  	val = val << 7
  	current_b := b[0]
  	continuation = ((current_b & 0x80) == 0x80)
  	val = val | int(current_b & 0x7F)
  }
- return val, err
+ return val, n, err
 }
 
 
@@ -280,21 +306,32 @@ func (s *StorageWriter) Write(p *Data) bool {
 func ToBytes(p *Data) []byte {
 	output := make([]byte, 0)
 	key_size := len((*p).row_key)
-	payload_length := ToVarInts((*p).size)
-	output = append(output, payload_length...)
+	payload_sz := (*p).size
 	key_length := ToVarInts(key_size)
+	payload_sz += uint32(len(key_length))
 	output = append(output, key_length...)
 	for i := 0; i < key_size; i++{
 		output = append(output, byte((*p).row_key[i]))
 	}
 	for _,v := range p.cols {
-		col_length := ToVarInts(len(v))
-		output = append(output, col_length...)
-		for _, c := range v {
+		name := v.name
+		name_sz := ToVarInts(len(name))
+		payload_sz += uint32(len(name_sz))
+		output = append(output, name_sz...)
+		for _, c := range name {
+			output = append(output, byte(c))
+		}
+
+		col := v.col
+		col_sz := ToVarInts(len(col))
+		output = append(output, col_sz...)
+		payload_sz += uint32(len(col_sz))
+		for _, c := range col {
 			output = append(output, byte(c))
 		}
 	}
-	return output
+	payload_length := ToVarInts(payload_sz)
+	return append(payload_length, output...)
 }
 
 func (s *StorageWriter) Flush() {

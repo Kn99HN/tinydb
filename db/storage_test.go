@@ -39,15 +39,15 @@ func generateRandomData(st_size int, cols_length int) *Data {
 		b[i] = letters[rand.Intn(len(letters))]
 	}
 	key := string(b)
-	cols := make([]string, cols_length)
+	cols := make([]Column, cols_length)
 	for j := 0; j < cols_length; j++ {
 		col := make([]rune, st_size)
 		for i := range col {
 			col[i] = letters[rand.Intn(len(letters))]
 		}
-		cols[j] = string(col)
+		cols[j] = Column { string(col), string(col) }
 	}
-	return &Data{ key, cols, uint32(st_size + st_size * cols_length) }
+	return &Data{ key, cols, uint32(st_size + st_size * cols_length * 2) }
 }
 
 func TestWrite(t *testing.T) {
@@ -61,7 +61,7 @@ func TestWrite(t *testing.T) {
 	wr.Flush()
 
 	r := initStorageReader(dir, file_number)
-	actual_data := r.Read(expected_data.row_key)
+	actual_data, _ := r.ReadRow(0)
 	if !reflect.DeepEqual(expected_data, actual_data) {
 		t.Errorf("Expected %v. Actual %v", expected_data, actual_data)
 	}

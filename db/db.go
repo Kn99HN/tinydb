@@ -692,3 +692,16 @@ func parseSelectionNode(args interface{}, child *Node) Iterator {
 	}
 	return &SelectionNode{ p, &it }
 }
+
+/*
+type FileScan struct {
+	reader *StorageReader
+	int64 offset
+}
+
+func (r FileScan) Next() *Record {
+	data, offset := reader.ReadRow(r.offset)
+	r.offset = offset
+	for i, col := range(data.cols) {
+	}
+}*/
