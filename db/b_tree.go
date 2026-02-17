@@ -207,13 +207,23 @@ func QuickSortHelper(keys[] string, values []string, children []TreeNode, low in
 	partition_index := (low + high) / 2
 	i := low
 	j := high
-	for i < j {
-		pivot := keys[partition_index]
-		low_val := keys[i]
-		high_val := keys[j]
-		ltp := strings.Compare(low_val, pivot) >= 0
-		gtp := strings.Compare(high_val, pivot) <= 0
-		if ltp && gtp {
+	pivot := keys[partition_index]
+	for i <= j {
+		gte_partition := false
+		for i < len(keys) {
+			low_val := keys[i]
+			gte_partition = strings.Compare(low_val, pivot) >= 0
+			if gte_partition { break }
+			i++
+		}
+		lte_partition := false
+		for j >= 0 {
+			high_val := keys[j]
+			lte_partition = strings.Compare(high_val, pivot) <= 0
+			if lte_partition { break }
+			j--
+		}
+		if gte_partition && lte_partition && i <= j {
 			tmp := keys[j]
 			keys[j] = keys[i]
 			keys[i] = tmp
@@ -230,19 +240,12 @@ func QuickSortHelper(keys[] string, values []string, children []TreeNode, low in
 				children[i] = tmp_child_1
 				children[i + 1] = tmp_child_2
 			}
-			if i == partition_index {
-				partition_index = j
-			} else if j == partition_index {
-				partition_index = i
-			}
 			i++
 			j--
 		}
-		if !ltp { i++ }
-		if !gtp { j--}
 	}
-	QuickSortHelper(keys, values, children, low, partition_index)
-	QuickSortHelper(keys, values, children, partition_index + 1, high)
+	QuickSortHelper(keys, values, children, low, j)
+	QuickSortHelper(keys, values, children, i, high)
 }
 
 

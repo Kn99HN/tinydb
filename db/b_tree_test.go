@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"time"
 	"reflect"
-	"fmt"
+	//"fmt"
 )
 
 
@@ -153,6 +153,7 @@ func TestBinarySearchEdge(t *testing.T) {
 
 func TestQuickSort(t *testing.T) {
 	keys := generateStringArrays(1, 5)
+	//keys := []string{ "w", "l", "g", "i", "k" }
 	values := generateStringArrays(1, 5)
 	children := []TreeNode{ nil, nil, nil, nil, nil, nil }
 	expected_sorted_keys := make([]string, len(keys))
@@ -162,11 +163,13 @@ func TestQuickSort(t *testing.T) {
 	slices.SortFunc(expected_sorted_keys, func(a, b string) int {
 			return strings.Compare(strings.ToLower(a), strings.ToLower(b))
 	})
-	fmt.Printf("Keys %v, Values %v", keys, values)
+	unsorted_keys := make([]string, len(keys))
+	copy(unsorted_keys, keys)
 	QuickSort(keys, values, children)
 
 	if !slices.Equal(expected_sorted_keys, keys) {
-		t.Errorf("Expected %v. Actual %v", expected_sorted_keys, keys)
+		t.Errorf("Expected %v. Actual %v. Unsort %v", expected_sorted_keys, keys,
+		unsorted_keys)
 	}
 }
 
