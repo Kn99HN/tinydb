@@ -190,8 +190,9 @@ func TestCountNodeCompositeKey(t *testing.T) {
 	}
 	s := initScanNode(movies)
 	c := initCountNode(s, []string{"Name", "Id"})
+	sort := initSortNode(c, []SortTuple{ SortTuple{ "Name", ASC, }, SortTuple{ "Id", ASC, }  } )
 
-	r1 := c.next()
+	r1 := sort.next()
 	expected_c1 := Record{ values: map[string]string{
 		"Name": "Movie 1",
 		"Id": "1",
@@ -202,7 +203,7 @@ func TestCountNodeCompositeKey(t *testing.T) {
 		t.Errorf("Expected %s. Actual %s",  expected_c1, r1)
 	}
 
-	r2 := c.next()
+	r2 := sort.next()
 	expected_c2 := Record{ values: map[string]string{
 		"Name": "Movie 1",
 		"Id": "3",

@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"time"
 	"reflect"
+	"fmt"
 )
 
 
@@ -161,6 +162,7 @@ func TestQuickSort(t *testing.T) {
 	slices.SortFunc(expected_sorted_keys, func(a, b string) int {
 			return strings.Compare(strings.ToLower(a), strings.ToLower(b))
 	})
+	fmt.Printf("Keys %v, Values %v", keys, values)
 	QuickSort(keys, values, children)
 
 	if !slices.Equal(expected_sorted_keys, keys) {
