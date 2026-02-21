@@ -7,12 +7,18 @@ import (
 	//"fmt"
 )
 
+func makeMovies() []Record {
+	m1 := makeRecord("1", "Movie 1", "1", "1")
+	m2 := makeRecord("2", "Movie 2", "2", "2")
+	return []Record{ m1, m2 }
+}
 
 func TestScanNode(t *testing.T) {
-	m1 := makeRecord("Movie 1", "1", "1")
-	m2 := makeRecord("Movie 2", "2", "2")
+	m1 := makeRecord("1", "Movie 1", "1", "1")
+	m2 := makeRecord("2", "Movie 2", "2", "2")
 	movies := []Record{m1, m2}
-	s := initScanNode(movies)
+	scanner := initStaticScan(movies)
+	s := initScanNode(scanner)
 
 	r1 := s.next()
 	if !reflect.DeepEqual(*r1, m1) {
@@ -25,10 +31,11 @@ func TestScanNode(t *testing.T) {
 }
 
 func TestChildNode(t *testing.T) {
-	m1 := makeRecord("Movie 1", "1", "1")
-	m2 :=  makeRecord("Movie 2", "2", "2")
+	m1 := makeRecord("1", "Movie 1", "1", "1")
+	m2 :=  makeRecord("2", "Movie 2", "2", "2")
 	movies := []Record{ m1, m2}
-	s := initScanNode(movies)
+	scanner := initStaticScan(movies)
+	s := initScanNode(scanner)
 	l := initLimitNode(2, s)
 
 	r1 := l.next()
@@ -46,10 +53,11 @@ func TestChildNode(t *testing.T) {
 }
 
 func TestSelectionNode(t *testing.T) {
-	m1 := makeRecord("Movie 1", "1", "1")
-	m2 :=  makeRecord("Movie 2", "2", "2")
+	m1 := makeRecord("1", "Movie 1", "1", "1")
+	m2 :=  makeRecord("2", "Movie 2", "2", "2")
 	movies := []Record{ m1, m2 }
-	s := initScanNode(movies)
+	scanner := initStaticScan(movies)
+	s := initScanNode(scanner)
 
 	left := initPredicateExpression("Id", EQ, "1")
 	expression := initPredicateExpressions(left, AND, nil)
@@ -67,10 +75,11 @@ func TestSelectionNode(t *testing.T) {
 }
 
 func TestProjectionNode(t *testing.T) {
-	m1 := makeRecord("Movie 1", "1", "1")
-	m2 :=  makeRecord("Movie 2", "2", "2")
+	m1 := makeRecord("1", "Movie 1", "1", "1")
+	m2 :=  makeRecord("2", "Movie 2", "2", "2")
 	movies := []Record{ m1, m2 }
-	s := initScanNode(movies)
+	scanner := initStaticScan(movies)
+	s := initScanNode(scanner)
 
 	p := initProjectionNode([]string{"Name"}, s)
 
@@ -86,13 +95,14 @@ func TestProjectionNode(t *testing.T) {
 }
 
 func TestSortNode(t *testing.T) {
-	m1 := makeRecord("Movie 1", "1", "1")
-	m2 := makeRecord("Movie 2", "2", "2")
-	m3 := makeRecord("Movie 3", "3", "3")
+	m1 := makeRecord("1", "Movie 1", "1", "1")
+	m2 := makeRecord("2", "Movie 2", "2", "2")
+	m3 := makeRecord("3", "Movie 3", "3", "3")
 	movies := []Record{
 		m3, m1, m2,
 	}
-	s := initScanNode(movies)
+	scanner := initStaticScan(movies)
+	s := initScanNode(scanner)
 
 	sort := initSortNode(s, []SortTuple{
 		SortTuple{"Id", ASC},
@@ -113,10 +123,11 @@ func TestSortNode(t *testing.T) {
 }
 
 func TestSelectionNodeAndPredicate(t *testing.T) {
-	m1 := makeRecord("Movie 1", "1", "2")
-	m2 :=  makeRecord("Movie 2", "1", "1")
+	m1 := makeRecord("1", "Movie 1", "1", "2")
+	m2 :=  makeRecord("2", "Movie 2", "1", "1")
 	movies := []Record{ m1, m2 }
-	s := initScanNode(movies)
+	scanner := initStaticScan(movies)
+	s := initScanNode(scanner)
 
 	left := initPredicateExpression("Id", EQ, "1")
 	right := initPredicateExpressions(initPredicateExpression("Year", EQ, "2"), AND, nil)
@@ -135,11 +146,12 @@ func TestSelectionNodeAndPredicate(t *testing.T) {
 }
 
 func TestSelectionNodeOrPredicate(t *testing.T) {
-	m1 := makeRecord("Movie 1", "1", "1")
-	m2 :=  makeRecord("Movie 2", "2", "2")
-	m3 :=  makeRecord("Movie 3", "3", "3")
+	m1 := makeRecord("1", "Movie 1", "1", "1")
+	m2 :=  makeRecord("2", "Movie 2", "2", "2")
+	m3 :=  makeRecord("3", "Movie 3", "3", "3")
 	movies := []Record{ m1, m2, m3 }
-	s := initScanNode(movies)
+	scanner := initStaticScan(movies)
+	s := initScanNode(scanner)
 
 	left := initPredicateExpression("Id", EQ, "1")
 	right := initPredicateExpressions(initPredicateExpression( "Id", EQ, "2" ), AND, nil)
@@ -162,13 +174,14 @@ func TestSelectionNodeOrPredicate(t *testing.T) {
 }
 
 func TestCountNode(t *testing.T) {
-	m1 := makeRecord("Movie 1", "1", "1")
-	m2 := makeRecord("Movie 1", "2", "2")
-	m3 := makeRecord("Movie 1", "3", "3")
+	m1 := makeRecord("1", "Movie 1", "1", "1")
+	m2 := makeRecord("2", "Movie 1", "2", "2")
+	m3 := makeRecord("3", "Movie 1", "3", "3")
 	movies := []Record{
 		m1, m2, m3,
 	}
-	s := initScanNode(movies)
+	scanner := initStaticScan(movies)
+	s := initScanNode(scanner)
 	c := initCountNode(s, []string{"Name"})
 
 	r1 := c.next()
@@ -182,13 +195,14 @@ func TestCountNode(t *testing.T) {
 }
 
 func TestCountNodeCompositeKey(t *testing.T) {
-	m1 := makeRecord("Movie 1", "1", "1")
-	m2 := makeRecord("Movie 1", "1", "2")
-	m3 := makeRecord("Movie 1", "3", "3")
+	m1 := makeRecord("1", "Movie 1", "1", "1")
+	m2 := makeRecord("2", "Movie 1", "1", "2")
+	m3 := makeRecord("3", "Movie 1", "3", "3")
 	movies := []Record{
 		m1, m2, m3,
 	}
-	s := initScanNode(movies)
+	scanner := initStaticScan(movies)
+	s := initScanNode(scanner)
 	c := initCountNode(s, []string{"Name", "Id"})
 	sort := initSortNode(c, []SortTuple{ SortTuple{ "Name", ASC, }, SortTuple{ "Id", ASC, }  } )
 
@@ -228,10 +242,13 @@ func TestGenerateTree(t *testing.T) {
 }
 
 func TestGenerateQueryTree(t *testing.T) {
-	b := ` {"head": { "name": "SCAN", "args": ["movies"], "child": null } }`
+	b := ` {"head": { "name": "SCAN", "args": {}, "child": {
+		"name": "STATIC_SCAN"
+	}} }`
 	a_t := generateTree(b)
 	query_t := transformToQueryTree(a_t)
-	expected_query_t := initScanNode(movies)
+	scanner := initStaticScanner([]Record{})
+	expected_query_t := initScanNode(scanner)
 
 	if !reflect.DeepEqual(expected_query_t, query_t) {
 		t.Errorf("Expected %#v. Actual %#v", expected_query_t, query_t)
@@ -565,4 +582,20 @@ func TestGenerateQueryTreeSortNode(t *testing.T) {
 	}
 }
 
+func TestGenerateQueryTreeFileScanNode(t *testing.T) {
+	b := `{"head": { "name": "SCAN", "args": {}, "child": {
+		"name": "FILE_SCAN", "args": {"dir": "test", "file_number": "0"}
+	}} }`
+	a_t := generateTree(b)
+	actual_query_t := transformToQueryTree(a_t)
+	reader := initStorageReader("data", 0)
+	fscan_node = initFileScan(reader)
+	scan_node := initScanNode(fscan_node)
 
+	for n := actual_query_t.next(); n != nil; n = actual_query_t.next() {
+		e := scan_node.next()
+		if !reflect.DeepEqual(n, e) {
+			t.Errorf("Expected %v. Actual %v", e, n)
+		}
+	}
+}

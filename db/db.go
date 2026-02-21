@@ -8,15 +8,17 @@ import (
 	"strings"
 	"os"
 	"bufio"
+	"log"
 )
 
 
 type Record struct {
+	key string
 	values map[string]string
 }
 
 func (r Record) String() string {
-	output := ""
+	output := r.key
 	for k, v := range(r.values) {
 		output += fmt.Sprintf("%s: %s,", k, v)
 	}
@@ -29,44 +31,6 @@ func (r Record) getColumn(column string) (string, error) {
 		return "", fmt.Errorf("No column %s for record", column)
 	}
 	return v, nil
-}
-
-var movies = []Record{
-	Record{ 
-		values: map[string]string {
-			"Name": "Movie 1",
-			"Id": "1",
-			"Year": "1",
-		},
-	},
-	Record{ 
-		values: map[string]string {
-			"Name": "Movie 2",
-			"Id": "2",
-			"Year": "2",
-		},
-	},
-	Record{
-		values: map[string]string {
-			"Name": "Movie 3",
-			"Id": "3",
-			"Year": "3",
-		},
-	},
-	Record{
-		values: map[string]string {
-			"Name": "Movie 4",
-			"Id": "4",
-			"Year": "4",
-		},
-	},
-	Record{
-		values: map[string]string {
-			"Name": "Movie 5",
-			"Id": "5",
-			"Year": "5",
-		},
-	},
 }
 
 func readFromDisk(file_path string) []Record {
@@ -90,7 +54,7 @@ func readFromDisk(file_path string) []Record {
 	return records
 }
 
-func makeRecord(name string, id string, year string) Record {
+func makeRecord(row_key string, name string, id string, year string) Record {
 	return Record{values: map[string]string {
 		"Name": name,
 		"Id": id,
@@ -103,23 +67,15 @@ type Iterator interface {
 }
 
 type ScanNode struct {
- input []Record
- i uint32
+	child *Iterator
 }
 
-func initScanNode(movies []Record) *ScanNode {
- return &ScanNode{ movies, 0 }
+func initScanNode(scanner Iterator) *ScanNode {
+ return &ScanNode{ &scanner }
 }
 
 func (s *ScanNode) next() *Record {
-	i := (*s).i
-	input := (*s).input
-	if i >= uint32(len(input)) {
-		return nil
-	}
-	node := input[i]
-	(*s).i = i + 1
-	return &node
+	return (*s.child).next()
 }
 
 type LimitNode struct {
@@ -458,8 +414,16 @@ func parseNode(n *Node) (Iterator, error) {
 		return nil, nil
 	}
 	switch n.Name {
+		case "STATIC_SCAN":
+			return initStaticScan([]Record{}), nil
+		case "FILE_SCAN":
+			return initFileScanNode(parseFileScanNodeArgs(n.Args)), nil
 		case "SCAN":
-			return initScanNode(movies), nil
+			child, err := parseNode(n.Child)
+			if err != nil {
+				return nil, err
+			}
+			return initScanNode(child), nil
 		case "PROJECTION":
 			child, err := parseNode(n.Child)
 			if err != nil {
@@ -693,15 +657,62 @@ func parseSelectionNode(args interface{}, child *Node) Iterator {
 	return &SelectionNode{ p, &it }
 }
 
-/*
-type FileScan struct {
-	reader *StorageReader
-	int64 offset
+func parseFileScanNodeArgs(args interface{}) *StorageReader {
+	margs, ok := args.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	dir, ok := margs["dir"]
+	if !ok {
+		log.Fatal("Missing argument dir for filescan node")
+	}
+	file_number, ok := margs["file_number"]
+	if !ok {
+		log.Fatal("Missing argument file_number for filescan node")
+	}
+	asserted_dir, ok := dir.(string)
+	if !ok {
+		log.Fatal("Invalid argument dir for filescan node")
+	}
+	asserted_file_number, ok := file_number.(int)
+	if !ok {
+		log.Fatal("Invalid argument file_number for filescan node")
+	}
+	reader := initStorageReader(asserted_dir, asserted_file_number)
+	return reader
 }
 
-func (r FileScan) Next() *Record {
-	data, offset := reader.ReadRow(r.offset)
+func initFileScanNode(reader *StorageReader) Iterator {
+	return FileScan{ reader, 0 }
+}
+
+type FileScan struct {
+	reader *StorageReader
+	offset int64
+}
+
+func (r FileScan) next() *Record {
+	data, offset := r.reader.ReadRow(r.offset)
 	r.offset = offset
-	for i, col := range(data.cols) {
+	ret := &Record{}
+	ret.key = data.row_key
+	for _, col := range(data.cols) {
+		ret.values[col.name] = col.col
 	}
-}*/
+	return ret
+}
+
+type StaticScan struct {
+	r []Record
+	i int
+}
+
+func initStaticScan(r []Record) Iterator {
+	return StaticScan{ r, 0 }
+}
+
+func (r StaticScan) next() *Record {
+	ret := r.r[r.i]
+	r.i++
+	return &ret
+}
