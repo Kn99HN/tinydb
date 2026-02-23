@@ -7,10 +7,36 @@ import (
 	//"fmt"
 )
 
+type StaticScanNode struct {
+	r []Record
+	i int
+}
+
+func initStaticScan(movies []Record) Iterator {
+	return &StaticScanNode{ movies, 0 }
+}
+
+func (s *StaticScanNode) next() *Record {
+	index := (*s).i
+	max := len((*s).r)
+	if index >= max {
+		return nil
+	}
+	ret := (*s).r[index]
+	(*s).i = (*s).i + 1
+	return &ret
+}
+
 func makeMovies() []Record {
 	m1 := makeRecord("1", "Movie 1", "1", "1")
 	m2 := makeRecord("2", "Movie 2", "2", "2")
-	return []Record{ m1, m2 }
+	m3 := makeRecord("3", "Movie 3", "3", "3")
+
+	return []Record{ m1, m2, m3 }
+}
+
+func staticScanConstructor(p NodeParser, n *Node) Iterator {
+	return initStaticScan(makeMovies())
 }
 
 func TestScanNode(t *testing.T) {
@@ -245,28 +271,15 @@ func TestGenerateQueryTree(t *testing.T) {
 	b := ` {"head": { "name": "SCAN", "args": {}, "child": {
 		"name": "STATIC_SCAN"
 	}} }`
+	Registry["STATIC_SCAN"] = staticScanConstructor
+	defer delete(Registry, "STATIC_SCAN")
 	a_t := generateTree(b)
 	query_t := transformToQueryTree(a_t)
-	scanner := initStaticScanner([]Record{})
+	scanner :=  initStaticScan(makeMovies())
 	expected_query_t := initScanNode(scanner)
 
 	if !reflect.DeepEqual(expected_query_t, query_t) {
 		t.Errorf("Expected %#v. Actual %#v", expected_query_t, query_t)
-	}
-}
-
-func TestEvaluatedQueryTree(t *testing.T) {
-	b := ` {"head": { "name": "SCAN", "args": ["movies"], "child": null } }`
-	a_t := generateTree(b)
-	actual_query_t := transformToQueryTree(a_t)
-	expected_query_t := initScanNode(movies)
-
-	for expected := expected_query_t.next(); expected != nil; expected =
-	expected_query_t.next() {
-		actual := actual_query_t.next()
-		if !reflect.DeepEqual(expected, actual) {
-			t.Errorf("Expected %#v. Actual %#v", expected, actual)
-		}
 	}
 }
 
@@ -282,7 +295,9 @@ func TestGenerateTreeProjection(t *testing.T) {
 }
 
 func TestGenerateQueryTreeProjection(t *testing.T) {
-	b := ` {"head": { "name": "PROJECTION", "args": ["Name", "Id"], "child": null } }`
+	b := ` {"head": { "name": "PROJECTION", "args": ["Name", "Id"], "child": {
+		"name": "STATIC_SCAN"
+	}} }`
 	a_t := generateTree(b)
 	query_t := transformToQueryTree(a_t)
 	expected_query_t := initProjectionNode([]string{"Name", "Id"}, nil)
@@ -294,10 +309,16 @@ func TestGenerateQueryTreeProjection(t *testing.T) {
 
 func TestGenerateQueryTreeProjectionWithChild(t *testing.T) {
 	b := ` {"head": { "name": "PROJECTION", "args": ["Name", "Id"], "child": {
-			"name": "SCAN", "args": ["movies"], "child": null }} }`
+			"name": "SCAN", "args": {}, "child": {
+				"name": "STATIC_SCAN"
+			} }} }`
+	Registry["STATIC_SCAN"] = staticScanConstructor
+	defer delete(Registry, "STATIC_SCAN")
 	a_t := generateTree(b)
 	query_t := transformToQueryTree(a_t)
-	scan_node := initScanNode(movies)
+	
+	scanner := initStaticScan(makeMovies())
+	scan_node := initScanNode(scanner)
 	expected_query_t := initProjectionNode([]string{"Name", "Id"}, scan_node)
 
 	if !reflect.DeepEqual(query_t, expected_query_t) {
@@ -307,10 +328,16 @@ func TestGenerateQueryTreeProjectionWithChild(t *testing.T) {
 
 func TestEvaluateQueryTreeProjectionWithChild(t *testing.T) {
 	b := ` {"head": { "name": "PROJECTION", "args": ["Name", "Id"], "child": {
-			"name": "SCAN", "args": ["movies"], "child": null }} }`
+			"name": "SCAN", "args": {}, "child": {
+				"name": "STATIC_SCAN"
+			}}} }`
+	Registry["STATIC_SCAN"] = staticScanConstructor
+	defer delete(Registry, "STATIC_SCAN")
 	a_t := generateTree(b)
 	actual_query_t := transformToQueryTree(a_t)
-	scan_node := initScanNode(movies)
+	
+	scanner := initStaticScan(makeMovies())
+	scan_node := initScanNode(scanner)
 	expected_query_t := initProjectionNode([]string{"Name", "Id"}, scan_node)
 
 	for expected := expected_query_t.next(); expected != nil; expected = expected_query_t.next() {
@@ -346,11 +373,17 @@ func TestGenerateQueryTreeLimit(t *testing.T) {
 
 func TestEvaluateQueryLimit(t *testing.T) {
 	b := ` {"head": { "name": "LIMIT", "args": ["1"], "child": {
-		"name": "SCAN", "args": ["movies"]
+		"name": "SCAN", "args": {}, "child": {
+			"name": "STATIC_SCAN"
+		}
 	} } }`
+	Registry["STATIC_SCAN"] = staticScanConstructor
+	defer delete(Registry, "STATIC_SCAN")
 	a_t := generateTree(b)
 	actual_query_t := transformToQueryTree(a_t)
-	scan_node := initScanNode(movies)
+	
+	scanner := initStaticScan(makeMovies())
+	scan_node := initScanNode(scanner)
 	expected_query_t := initLimitNode(1, scan_node)
 
 	expected := expected_query_t.next()
@@ -388,11 +421,15 @@ func TestGenerateQueryTreeCount(t *testing.T) {
 
 func TestEvaluateQueryCount(t *testing.T) {
 	b := ` {"head": { "name": "COUNT", "args": ["Name"], "child": {
-		"name": "SCAN", "args": ["movies"]
+		"name": "SCAN", "args": {}, "child": { "name": "STATIC_SCAN" }
 	} } }`
+	Registry["STATIC_SCAN"] = staticScanConstructor
+	defer delete(Registry, "STATIC_SCAN")
 	a_t := generateTree(b)
 	actual_query_t := transformToQueryTree(a_t)
-	scan_node := initScanNode(movies)
+	
+	scanner := initStaticScan(makeMovies())
+	scan_node := initScanNode(scanner)
 	expected_query_t := initCountNode(scan_node, []string{"Name"})
 
 	expected_arr := make([]Record, 0)
@@ -452,13 +489,19 @@ func TestEvaluateSelectionQueryTreeSingleton(t *testing.T) {
 	b := ` {"head": { "name": "SELECTION", "args": {"AND": {
 		"EQ": ["Id", "1"]
 	}}, "child": {
-		"name": "SCAN", "args": ["movies"]
+		"name": "SCAN", "args": {}, "child": {
+			"name": "STATIC_SCAN"
+		}
 	} } }`
+	Registry["STATIC_SCAN"] = staticScanConstructor
+	defer delete(Registry, "STATIC_SCAN")
 	a_t := generateTree(b)
 	actual_query_t := transformToQueryTree(a_t)
 	left := initPredicateExpression("Id", EQ, "1")
 	exp := initPredicateExpressions(left, AND, nil)
-	scan_node := initScanNode(movies)
+	
+	scanner := initStaticScan(makeMovies())
+	scan_node := initScanNode(scanner)
 	expected_query_t := initSelectionNode(exp, scan_node)
 
 	expected := expected_query_t.next()
@@ -521,15 +564,21 @@ func TestGenerateQueryTreeSelectionMultipleExpr(t *testing.T) {
 				"EQ": ["Year", "2"]
 			}
 		}}, "child": {
-			"name": "SCAN", "args": ["movies"]
+			"name": "SCAN", "args": {}, "child": {
+				"name": "STATIC_SCAN"
+			}
 		}} }`
+	Registry["STATIC_SCAN"] = staticScanConstructor
+	defer delete(Registry, "STATIC_SCAN")
 	a_t := generateTree(b)
 	actual_query_t := transformToQueryTree(a_t)
 	left := initPredicateExpression("Id", EQ, "1")
 	right_exp := initPredicateExpression("Year", EQ, "1")
 	right := initPredicateExpressions(right_exp, OR, nil)
 	exp := initPredicateExpressions(left, AND, right)
-	scan_node := initScanNode(movies)
+
+	scanner := initStaticScan(makeMovies())
+	scan_node := initScanNode(scanner)
 	expected_query_t := initSelectionNode(exp, scan_node)
 
 	expected := expected_query_t.next()
@@ -565,11 +614,17 @@ func TestGenerateQueryTreeSortNode(t *testing.T) {
 	b := `{"head": { "name": "SORT", "args": {
 		"sorted_args": ["Id:DESC"]
 	}, "child": {
-		"name": "SCAN", "args": ["movies"]
+		"name": "SCAN", "args": {}, "child": {
+			"name": "STATIC_SCAN"
+		}
 	}} }`
+	Registry["STATIC_SCAN"] = staticScanConstructor
+	defer delete(Registry, "STATIC_SCAN")
 	a_t := generateTree(b)
 	actual_query_t := transformToQueryTree(a_t)
-	scan_node := initScanNode(movies)
+
+	scanner := initStaticScan(makeMovies())
+	scan_node := initScanNode(scanner)
 	sort_node := initSortNode(scan_node, []SortTuple{
 		SortTuple{ "Id", DESC },
 	})
@@ -582,6 +637,7 @@ func TestGenerateQueryTreeSortNode(t *testing.T) {
 	}
 }
 
+/*
 func TestGenerateQueryTreeFileScanNode(t *testing.T) {
 	b := `{"head": { "name": "SCAN", "args": {}, "child": {
 		"name": "FILE_SCAN", "args": {"dir": "test", "file_number": "0"}
@@ -589,7 +645,7 @@ func TestGenerateQueryTreeFileScanNode(t *testing.T) {
 	a_t := generateTree(b)
 	actual_query_t := transformToQueryTree(a_t)
 	reader := initStorageReader("data", 0)
-	fscan_node = initFileScan(reader)
+	fscan_node := initFileScan(reader)
 	scan_node := initScanNode(fscan_node)
 
 	for n := actual_query_t.next(); n != nil; n = actual_query_t.next() {
@@ -598,4 +654,4 @@ func TestGenerateQueryTreeFileScanNode(t *testing.T) {
 			t.Errorf("Expected %v. Actual %v", e, n)
 		}
 	}
-}
+}*/

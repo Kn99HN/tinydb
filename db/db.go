@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
-	"os"
-	"bufio"
 	"log"
 )
 
@@ -31,27 +29,6 @@ func (r Record) getColumn(column string) (string, error) {
 		return "", fmt.Errorf("No column %s for record", column)
 	}
 	return v, nil
-}
-
-func readFromDisk(file_path string) []Record {
-	file, err := os.Open(file_path)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to read from %s", file_path))
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	records := make([]Record, 0)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		parts := strings.Split(line, ",")
-		if len(parts) != 3 {
-			panic(fmt.Sprintf("Malformed line %s", line))
-		}
-		records = append(records, makeRecord(parts[0], parts[1], parts[2]))
-	}
-	return records
 }
 
 func makeRecord(row_key string, name string, id string, year string) Record {
@@ -409,58 +386,70 @@ func generateTree(input string) *Tree {
 	return &t
 }
 
-func parseNode(n *Node) (Iterator, error) {
-	if n == nil {
-		return nil, nil
-	}
-	switch n.Name {
-		case "STATIC_SCAN":
-			return initStaticScan([]Record{}), nil
-		case "FILE_SCAN":
-			return initFileScanNode(parseFileScanNodeArgs(n.Args)), nil
-		case "SCAN":
-			child, err := parseNode(n.Child)
-			if err != nil {
-				return nil, err
-			}
-			return initScanNode(child), nil
-		case "PROJECTION":
-			child, err := parseNode(n.Child)
-			if err != nil {
-				return nil, err
-			}
-			return initProjectionNode(parseProjectionNodeArgs(n.Args), child), nil
-		case "LIMIT":
-			child, err := parseNode(n.Child)
-			if err != nil {
-				return nil, err
-			}
-			return initLimitNode(parseLimitNodeArg(n.Args), child), nil
-		case "SELECTION":
-			return parseSelectionNode(n.Args, n.Child), nil
-		case "SORT":
-			child, err := parseNode(n.Child)
-			if err != nil {
-				return nil, err
-			}
-			return initSortNode(child, parseSortNodeArgs(n.Args)), nil
-		case "COUNT":
-			child, err := parseNode(n.Child)
-			if err != nil {
-				return nil, err
-			}
-			return initCountNode(child, parseCountNodeArgs(n.Args)), nil
-		default:
-			return nil, fmt.Errorf("Failed to parse JSON into query tree")
-	}
+type NodeConstructor func(p NodeParser, n *Node) Iterator
+
+type Engine struct {
+	Registry map[string]NodeConstructor
+}
+
+type NodeParser interface {
+	Parse(n *Node) Iterator
+}
+
+func (e Engine) Parse(n *Node) Iterator {
+	if n == nil { return nil }
+	c, ok := e.Registry[n.Name]
+	if !ok { return nil }
+	return c(e, n)
+}
+
+func fileScanConstructor(p NodeParser, n *Node) Iterator {
+	return initFileScanNode(parseFileScanNodeArgs(n.Args))
+}
+
+func scanNodeConstructor(p NodeParser, n *Node) Iterator {
+	c := p.Parse(n.Child)
+	return initScanNode(c)
+}
+
+func projectionNodeConstructor(p NodeParser, n *Node) Iterator {
+	c := p.Parse(n.Child)
+	return initProjectionNode(parseProjectionNodeArgs(n.Args), c)
+}
+
+func limitNodeConstructor(p NodeParser, n *Node) Iterator {
+	c := p.Parse(n.Child)
+	return initLimitNode(parseLimitNodeArg(n.Args), c)
+}
+
+func selectionNodeConstructor(p NodeParser, n *Node) Iterator {
+	c := p.Parse(n.Child)
+	return initSelectionNode(parseSelectionNodeArgs(n.Args), c)
+}
+
+func sortNodeConstructor(p NodeParser, n *Node) Iterator {
+	c := p.Parse(n.Child)
+	return initSortNode(c, parseSortNodeArgs(n.Args))
+}
+
+func countNodeConstructor(p NodeParser, n *Node) Iterator {
+	c := p.Parse(n.Child)
+	return initCountNode(c, parseCountNodeArgs(n.Args))
+}
+
+var Registry = map[string]NodeConstructor {
+	"FILE_SCAN": fileScanConstructor,
+	"SCAN": scanNodeConstructor,
+	"PROJECTION": projectionNodeConstructor,
+	"LIMIT": limitNodeConstructor,
+	"SELECTION": selectionNodeConstructor,
+	"SORT": sortNodeConstructor,
+	"COUNT": countNodeConstructor,
 }
 
 func transformToQueryTree(input *Tree) Iterator {
-	n, err := parseNode(input.Head)
-	if err != nil {
-		return nil
-	}
-	return n
+	e := Engine{ Registry }
+	return e.Parse(input.Head)
 }
 
 func parseSortNodeArgs(args interface{}) []SortTuple {
@@ -644,17 +633,12 @@ func parsePredicates(args map[string]interface{}) *predicateExpressions {
 	parsePredicates(predicate) }
 }
 
-func parseSelectionNode(args interface{}, child *Node) Iterator {
+func parseSelectionNodeArgs(args interface{}) *predicateExpressions {
 	margs, ok := args.(map[string]interface{})
 	if !ok {
 		return nil
 	}
-	p := parsePredicates(margs)
-	it, err := parseNode(child)
-	if err != nil {
-		return nil
-	}
-	return &SelectionNode{ p, &it }
+	return parsePredicates(margs)
 }
 
 func parseFileScanNodeArgs(args interface{}) *StorageReader {
@@ -700,19 +684,4 @@ func (r FileScan) next() *Record {
 		ret.values[col.name] = col.col
 	}
 	return ret
-}
-
-type StaticScan struct {
-	r []Record
-	i int
-}
-
-func initStaticScan(r []Record) Iterator {
-	return StaticScan{ r, 0 }
-}
-
-func (r StaticScan) next() *Record {
-	ret := r.r[r.i]
-	r.i++
-	return &ret
 }
