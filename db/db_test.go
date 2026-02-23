@@ -6,7 +6,7 @@ import (
 	"slices"
 	"os"
 	"log"
-	//"fmt"
+	"fmt"
 )
 
 type StaticScanNode struct {
@@ -640,7 +640,7 @@ func TestGenerateQueryTreeSortNode(t *testing.T) {
 }
 
 func TestFileScanNodeGroup(t *testing.T) {
-	const dir = "./test"
+	const dir = "./db_test"
 	const perm = 0750
 	
 	func() {
@@ -677,9 +677,9 @@ func TestFileScanNodeGroup(t *testing.T) {
 	}()
 
 	t.Run("SubTest1", func(t *testing.T) {
-		b := `{"head": { "name": "SCAN", "args": {}, "child": {
-			"name": "FILE_SCAN", "args": {"dir": "test", "file_number": "0"}
-		}} }`
+		b := fmt.Sprintf(`{"head": { "name": "SCAN", "args": {}, "child": {
+			"name": "FILE_SCAN", "args": {"dir": "%s", "file_number": "0"}
+		}} }`, dir)
 		a_t := generateTree(b)
 		actual_query_t := transformToQueryTree(a_t)
 		

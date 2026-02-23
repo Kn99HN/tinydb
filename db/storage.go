@@ -62,8 +62,24 @@ func initStorageReader(dir string, file_number int) *StorageReader {
 }
 
 func (r *StorageReader) ReadRow(offset int64) (*Data, int64) {
+	var free_space uint32 = 0
+	file_size := make([]byte, 4)
+	_, err := r.file.ReadAt(file_size, 0)
+	if err == io.EOF { return nil, offset }
+	if err != nil {
+		log.Fatal(err)
+	}
+	for i := 0; i < len(file_size); i++ {
+		free_space = free_space << 8
+		free_space |= uint32(file_size[i])
+	}
+
+	occupied_sz := default_file_size - free_space
 	rd_offset := offset + 4
-	_, err := r.file.Seek(rd_offset, 0)
+	if rd_offset >= int64(occupied_sz) {
+		return nil, offset
+	}
+	_, err = r.file.Seek(rd_offset, 0)
 	if err != nil {
 		log.Fatal(err)
 	}

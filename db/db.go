@@ -681,6 +681,9 @@ type FileScan struct {
 
 func (r *FileScan) next() *Record {
 	data, offset := (*r).reader.ReadRow(r.offset)
+	if data == nil {
+		return nil
+	}
 	(*r).offset = offset
 	ret := &Record{}
 	ret.key = data.row_key
