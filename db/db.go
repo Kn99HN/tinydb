@@ -32,7 +32,7 @@ func (r Record) getColumn(column string) (string, error) {
 }
 
 func makeRecord(row_key string, name string, id string, year string) Record {
-	return Record{values: map[string]string {
+	return Record{ key: row_key, values: map[string]string {
 		"Name": name,
 		"Id": id,
 		"Year": year,
@@ -658,16 +658,20 @@ func parseFileScanNodeArgs(args interface{}) *StorageReader {
 	if !ok {
 		log.Fatal("Invalid argument dir for filescan node")
 	}
-	asserted_file_number, ok := file_number.(int)
+	asserted_file_number, ok := file_number.(string)
 	if !ok {
 		log.Fatal("Invalid argument file_number for filescan node")
 	}
-	reader := initStorageReader(asserted_dir, asserted_file_number)
+	num, err  := strconv.Atoi(asserted_file_number)
+	if err != nil {
+		log.Fatal("Invalid argument file number for filescan node. Expect an int")
+	}
+	reader := initStorageReader(asserted_dir, num)
 	return reader
 }
 
 func initFileScanNode(reader *StorageReader) Iterator {
-	return FileScan{ reader, 0 }
+	return &FileScan{ reader, 0 }
 }
 
 type FileScan struct {
@@ -675,11 +679,12 @@ type FileScan struct {
 	offset int64
 }
 
-func (r FileScan) next() *Record {
-	data, offset := r.reader.ReadRow(r.offset)
-	r.offset = offset
+func (r *FileScan) next() *Record {
+	data, offset := (*r).reader.ReadRow(r.offset)
+	(*r).offset = offset
 	ret := &Record{}
 	ret.key = data.row_key
+	ret.values = make(map[string]string)
 	for _, col := range(data.cols) {
 		ret.values[col.name] = col.col
 	}

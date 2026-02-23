@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"testing"
 	"slices"
+	"os"
+	"log"
 	//"fmt"
 )
 
@@ -637,21 +639,62 @@ func TestGenerateQueryTreeSortNode(t *testing.T) {
 	}
 }
 
-/*
-func TestGenerateQueryTreeFileScanNode(t *testing.T) {
-	b := `{"head": { "name": "SCAN", "args": {}, "child": {
-		"name": "FILE_SCAN", "args": {"dir": "test", "file_number": "0"}
-	}} }`
-	a_t := generateTree(b)
-	actual_query_t := transformToQueryTree(a_t)
-	reader := initStorageReader("data", 0)
-	fscan_node := initFileScan(reader)
-	scan_node := initScanNode(fscan_node)
-
-	for n := actual_query_t.next(); n != nil; n = actual_query_t.next() {
-		e := scan_node.next()
-		if !reflect.DeepEqual(n, e) {
-			t.Errorf("Expected %v. Actual %v", e, n)
+func TestFileScanNodeGroup(t *testing.T) {
+	const dir = "./test"
+	const perm = 0750
+	
+	func() {
+		err := os.Mkdir(dir, perm)
+		if err != nil && !os.IsExist(err) {
+			log.Fatal(err)
 		}
-	}
-}*/
+		wr := initStorageWriter(dir, 0)
+		records := makeMovies()
+		d := make([]Data, 0)
+		for _, r := range(records) {
+			size := len(r.key)
+			cols := make([]Column, 0)
+			for name, val := range(r.values) {
+				size += len(name) + len(val)
+				cols = append(cols, Column{ name, val })
+			}
+			d = append(d, Data{ r.key, cols, uint32(size) })
+		}
+		for _, r := range(d) {
+			succeeded := wr.Write(&r)
+			if !succeeded {
+				t.Errorf("Failed to write data")
+			}
+		}
+		wr.Flush()
+	}()
+	
+	// Ensure cleanup happens even if a test panics
+	defer func() {
+		if err := os.RemoveAll(dir); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	t.Run("SubTest1", func(t *testing.T) {
+		b := `{"head": { "name": "SCAN", "args": {}, "child": {
+			"name": "FILE_SCAN", "args": {"dir": "test", "file_number": "0"}
+		}} }`
+		a_t := generateTree(b)
+		actual_query_t := transformToQueryTree(a_t)
+		
+		reader := initStorageReader(dir, 0)
+		fscan_node := initFileScanNode(reader)
+		scan_node := initScanNode(fscan_node)
+		
+		for n := actual_query_t.next(); n != nil; n = actual_query_t.next() {
+			e := scan_node.next()
+			if !reflect.DeepEqual(n, e) {
+				t.Errorf("Expected %v. Actual %v", e, n)
+			}
+		}
+	})
+}
+
+
+
