@@ -4,6 +4,7 @@ import (
 	"fmt"
 	//"slices"
 	"strings"
+	"iter"
 )
 
 type SearchMode int
@@ -18,6 +19,7 @@ type TreeNode interface {
 	Find(k string) (string, error)
 	Balance() bool
 	SetParent(p TreeNode)
+	SetSibling(p TreeNode)
 	String() string
 	AddKey(k string)
 	AddValue(v string)
@@ -27,6 +29,7 @@ type TreeNode interface {
 	UpsertValues([]string)
 	NeedBalance() bool
 	IsRootNode() bool
+	All() iter.Seq[TreeNode]
 }
 
 type NotFoundError struct {
@@ -82,9 +85,10 @@ type LeafNode struct {
 	parent TreeNode
 	keys []string
 	values []string
+	sibling TreeNode
 }
 
-func newRootNode(m int) *RootNode {
+func newRootNode(m int) TreeNode {
 	return &RootNode {m, nil}
 }
 
@@ -96,7 +100,7 @@ func newInternalNode(m int) TreeNode {
 
 func newLeafNode(m int) TreeNode {
 	return &LeafNode {
-		m, nil, make([]string, 0), make([]string, 0),
+		m, nil, make([]string, 0), make([]string, 0), nil,
 	}
 }
 
@@ -161,14 +165,16 @@ func (n *InternalNode) AddChild(c TreeNode) {
 	n.children = append(n.children, c)
 }
 
-
+func (n *RootNode) SetSibling(p TreeNode) {}
+func (n *LeafNode) SetSibling(p TreeNode) {
+	n.sibling = p
+}
+func (n *InternalNode) SetSibling(p TreeNode) {}
 
 func (n *RootNode) SetParent(p TreeNode) {}
-
 func (n *LeafNode) SetParent(p TreeNode) {
 	n.parent = p
 }
-
 func (n *InternalNode) SetParent(p TreeNode) {
 	n.parent = p
 }
@@ -295,6 +301,7 @@ func (n *LeafNode) Balance() bool {
 	internal_node.AddKey(mid_key)
 	internal_node.AddChild(right_node)
 	right_node.SetParent(internal_node)
+	n.sibling = right_node
 
 	if n.parent != nil && n.parent.NeedBalance() {
 		n.parent.Balance()
@@ -371,4 +378,26 @@ func (n *LeafNode) Find(k string) (string, error) {
 		return "", &NotFoundError{ fmt.Sprintf("No record found for %s",k) }
 	}
 	return n.values[i], nil
+}
+
+func (root *RootNode) All() iter.Seq[TreeNode]{
+	return func(yield func(TreeNode) bool) {
+		for n := range root.child.All() {
+			yield(n)
+		}
+	}
+}
+
+func (n *InternalNode) All() iter.Seq[TreeNode]{
+	return func(yield func(TreeNode) bool) {
+		for _, c := range n.children {
+			yield(c)
+		}
+	}
+}
+
+func (n *LeafNode) All() iter.Seq[TreeNode]{
+	return func(yield func(TreeNode) bool) {
+		yield(n)
+	}
 }

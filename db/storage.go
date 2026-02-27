@@ -12,6 +12,7 @@ import (
 const default_storage_write_mode = os.O_CREATE | os.O_RDWR
 const permission = 0750
 const default_file_size uint32 = 1024
+const default_index_key_space_size = 3
 
 type Column struct {
 	name string
@@ -40,6 +41,8 @@ type Reader interface {
 
 type StorageWriter struct {
 	file *os.File
+	index_file *os.File
+	tree_index TreeNode
 }
 
 type StorageReader struct {
@@ -235,7 +238,22 @@ func initStorageWriter(dir string, file_number int) *StorageWriter {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return &StorageWriter{ f }
+	// TODO: this should read from index file
+	index_file_name := fmt.Sprintf("./%s/index_%d", dir, file_number)
+	index_file, err := os.OpenFile(index_file_name, default_storage_write_mode, permission)
+	if err != nil {
+		panic("Failed to read index file")
+	}
+	_, err = index_file.Write(buf.Bytes())
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = index_file.Truncate(int64(default_file_size))
+	if err != nil {
+		log.Fatal(err)
+	}
+	index := readIndexFile(index_file)
+	return &StorageWriter{ f, index_file, index }
 }
 
 func ToVarInts [T ~uint32| ~uint64 | ~int32 | ~int64 | ~int] (i T) []byte {
@@ -306,6 +324,7 @@ func (s *StorageWriter) Write(p *Data) bool {
 	offset := default_file_size - fsize
 	data := ToBytes(p)
 	_, err = s.file.WriteAt(data, int64(offset))
+	s.tree_index.Insert(p.row_key, fmt.Sprintf("%s:%d", s.file.Name(), offset))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -318,6 +337,42 @@ func (s *StorageWriter) Write(p *Data) bool {
 	}
 	return true
 }
+
+func readIndexFile(index_file *os.File) TreeNode {
+	_, err := index_file.Seek(0, 0)
+	if err != nil {
+		log.Fatal(err)
+	}
+	buf := make([]byte, 4)
+	_, err = index_file.Read(buf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var free_space uint32 = 0
+	for i := 0; i < len(buf); i++ {
+		free_space = free_space << 8
+		free_space |= uint32(buf[i])
+	}
+	max_size_to_read := int(default_file_size - free_space)
+	current_size := 0
+	root := newRootNode(default_index_key_space_size)
+	for current_size < max_size_to_read {
+		payload_size, p_n, varint_err := parseVarInts(index_file)
+		if varint_err == io.EOF { break }
+		key_size, k_n, varint_err := parseVarInts(index_file)
+		if varint_err == io.EOF { break }
+		key, string_err := parseString(index_file, key_size)
+		if string_err == io.EOF { break }
+		value_sz, v_n, varint_err := parseVarInts(index_file)
+		if varint_err == io.EOF { break }
+		value, string_err := parseString(index_file, value_sz)
+		if string_err == io.EOF { break }
+		current_size += payload_size + p_n + key_size + k_n + value_sz + v_n
+		root.Insert(key, value)
+	}
+	return root
+}
+
 
 func ToBytes(p *Data) []byte {
 	output := make([]byte, 0)

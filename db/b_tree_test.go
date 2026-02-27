@@ -10,6 +10,40 @@ import (
 	//"fmt"
 )
 
+func TestIterator(t *testing.T) {
+	expected_root := newRootNode(3)
+	left := newLeafNode(3)
+	left.AddKey("1")
+	left.AddValue("1")
+	right := newLeafNode(3)
+	right.AddKey("2")
+	right.AddValue("2")
+	right.AddKey("3")
+	right.AddValue("3")
+	i_node := newInternalNode(3)
+	i_node.AddKey("2")
+
+	i_node.SetParent(expected_root)
+	left.SetParent(i_node)
+	right.SetParent(i_node)
+	left.SetSibling(right)
+	i_node.AddChild(left)
+	i_node.AddChild(right)
+	expected_root.AddChild(i_node)
+
+	i := 0
+	for n := range expected_root.All() {
+		if n != left && i == 0 {
+			t.Errorf("Expected %v. Actual %v", left, n)
+		}
+		if n != right && i == 1 {
+			t.Errorf("Expected %v. Actual %v", left, n)
+		}
+		i++
+	}
+}
+
+
 
 func TestInsertAndFind(t *testing.T) {
 	root := newRootNode(3)
@@ -47,6 +81,7 @@ func TestInsertAndFindTwoLevels(t *testing.T) {
 	i_node.SetParent(expected_root)
 	left.SetParent(i_node)
 	right.SetParent(i_node)
+	left.SetSibling(right)
 	i_node.AddChild(left)
 	i_node.AddChild(right)
 	expected_root.AddChild(i_node)
@@ -86,6 +121,9 @@ func TestInsertAndFindThreeLevels(t *testing.T) {
 	c4.AddValue("4")
 	c4.AddKey("5")
 	c4.AddValue("5")
+	c1.SetSibling(c2)
+	c2.SetSibling(c3)
+	c3.SetSibling(c4)
 
 
 	i2 := newInternalNode(3)
