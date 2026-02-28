@@ -52,7 +52,7 @@ func generateRandomData(st_size int, cols_length int) *Data {
 
 func TestWrite(t *testing.T) {
 	file_number := 0
-	wr := initStorageWriter(dir, file_number)
+	wr := initStorageWriter(dir, file_number, true)
 	expected_data := generateRandomData(2, 2)
 	succeeded := wr.Write(expected_data)
 	if !succeeded {
@@ -60,7 +60,7 @@ func TestWrite(t *testing.T) {
 	}
 	wr.Flush()
 
-	r := initStorageReader(dir, file_number)
+	r := initStorageReader(dir, file_number, true)
 	actual_data, _ := r.ReadRow(0)
 	if !reflect.DeepEqual(expected_data, actual_data) {
 		t.Errorf("Expected %v. Actual %v", expected_data, actual_data)
@@ -69,7 +69,7 @@ func TestWrite(t *testing.T) {
 
 func TestWriteMultipleRecordsReadSingleRecord(t *testing.T) {
 	file_number := 0
-	wr := initStorageWriter(dir, file_number)
+	wr := initStorageWriter(dir, file_number, true)
 	d1 := generateRandomData(2, 2)
 	d2 := generateRandomData(2, 2)
 	succeeded := wr.Write(d1)
@@ -83,7 +83,7 @@ func TestWriteMultipleRecordsReadSingleRecord(t *testing.T) {
 
 	wr.Flush()
 
-	r := initStorageReader(dir, file_number)
+	r := initStorageReader(dir, file_number, true)
 	actual_data := r.Read(d1.row_key)
 	if !reflect.DeepEqual(d1, actual_data) {
 		t.Errorf("Expected %v. Actual %v", d1, actual_data)
@@ -92,7 +92,7 @@ func TestWriteMultipleRecordsReadSingleRecord(t *testing.T) {
 
 func TestWriteMultipleRecordsReadRows(t *testing.T) {
 	file_number := 0
-	wr := initStorageWriter(dir, file_number)
+	wr := initStorageWriter(dir, file_number, true)
 	d1 := generateRandomData(2, 2)
 	d2 := generateRandomData(2, 2)
 	succeeded := wr.Write(d1)
@@ -106,7 +106,7 @@ func TestWriteMultipleRecordsReadRows(t *testing.T) {
 
 	wr.Flush()
 
-	r := initStorageReader(dir, file_number)
+	r := initStorageReader(dir, file_number, true)
 	r1, offset_1 := r.ReadRow(0)
 	if !reflect.DeepEqual(d1, r1) {
 		t.Errorf("Expected %v. Actual %v", d1, r1)

@@ -648,7 +648,7 @@ func TestFileScanNodeGroup(t *testing.T) {
 		if err != nil && !os.IsExist(err) {
 			log.Fatal(err)
 		}
-		wr := initStorageWriter(dir, 0)
+		wr := initStorageWriter(dir, 0, true)
 		records := makeMovies()
 		d := make([]Data, 0)
 		for _, r := range(records) {
@@ -683,7 +683,7 @@ func TestFileScanNodeGroup(t *testing.T) {
 		a_t := generateTree(b)
 		actual_query_t := transformToQueryTree(a_t)
 		
-		reader := initStorageReader(dir, 0)
+		reader := initStorageReader(dir, 0, true)
 		fscan_node := initFileScanNode(reader)
 		scan_node := initScanNode(fscan_node)
 		

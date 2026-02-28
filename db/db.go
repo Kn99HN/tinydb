@@ -666,7 +666,7 @@ func parseFileScanNodeArgs(args interface{}) *StorageReader {
 	if err != nil {
 		log.Fatal("Invalid argument file number for filescan node. Expect an int")
 	}
-	reader := initStorageReader(asserted_dir, num)
+	reader := initStorageReader(asserted_dir, num, true)
 	return reader
 }
 

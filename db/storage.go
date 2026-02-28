@@ -62,7 +62,7 @@ type DataIndex struct {
 	file_path string
 }
 
-func initStorageReader(dir string, file_number int) *StorageReader {
+func initStorageReader(dir string, file_number int, use_index bool) *StorageReader {
 	file_path := fmt.Sprintf("./%s/data_%d", dir, file_number)
 	f, err := os.Open(file_path)
 	if err != nil {
@@ -74,7 +74,7 @@ func initStorageReader(dir string, file_number int) *StorageReader {
 		panic("Failed to read index file for creating storage reader")
 	}
 	root := readIndexFile(index_f)
-	return &StorageReader{ f, index_f, root, true }
+	return &StorageReader{ f, index_f, root, use_index }
 }
 
 func findOffset(r TreeNode, k string) string {
@@ -244,7 +244,7 @@ func parseVarInts(f *os.File) (int, int, error) {
 
 
 
-func initStorageWriter(dir string, file_number int) *StorageWriter {
+func initStorageWriter(dir string, file_number int, use_index bool) *StorageWriter {
 	file_path := fmt.Sprintf("./%s/data_%d", dir, file_number)
 	f, err := os.OpenFile(file_path, default_storage_write_mode, permission)
 	if err != nil {
@@ -277,7 +277,7 @@ func initStorageWriter(dir string, file_number int) *StorageWriter {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return &StorageWriter{ f, index_file, nil, true}
+	return &StorageWriter{ f, index_file, nil, use_index }
 }
 
 func ToVarInts [T ~uint32| ~uint64 | ~int32 | ~int64 | ~int] (i T) []byte {
