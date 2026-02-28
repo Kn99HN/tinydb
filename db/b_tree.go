@@ -14,6 +14,11 @@ const (
 	CHILDREN
 )
 
+type IndexRecord struct {
+	k string
+	v string
+}
+
 type TreeNode interface {
 	Insert(k string, v string) bool
 	Find(k string) (string, error)
@@ -30,6 +35,7 @@ type TreeNode interface {
 	NeedBalance() bool
 	IsRootNode() bool
 	All() iter.Seq[TreeNode]
+	GetIndexRecord() []*IndexRecord
 }
 
 type NotFoundError struct {
@@ -170,6 +176,17 @@ func (n *LeafNode) SetSibling(p TreeNode) {
 	n.sibling = p
 }
 func (n *InternalNode) SetSibling(p TreeNode) {}
+
+func (n *RootNode) GetIndexRecord() []*IndexRecord { return []*IndexRecord{} }
+func (n *LeafNode) GetIndexRecord() []*IndexRecord {
+	records := []*IndexRecord{}
+	for i, k := range n.keys {
+		records = append(records, &IndexRecord{ k, n.values[i]})
+	}
+	return records
+}
+func (n *InternalNode) GetIndexRecord() []*IndexRecord { return []*IndexRecord{} }
+
 
 func (n *RootNode) SetParent(p TreeNode) {}
 func (n *LeafNode) SetParent(p TreeNode) {

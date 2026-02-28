@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"strings"
+	"strconv"
 )
 
 const default_storage_write_mode = os.O_CREATE | os.O_RDWR
@@ -31,6 +33,7 @@ type Data struct {
 
 type Writer interface {
 	Write(data *Data) bool
+	WriteIndexFile(data *Data, free_space uint32) bool
 	Flush() bool
 }
 
@@ -42,11 +45,15 @@ type Reader interface {
 type StorageWriter struct {
 	file *os.File
 	index_file *os.File
-	tree_index TreeNode
+	index TreeNode
+	use_index bool
 }
 
 type StorageReader struct {
 	file *os.File
+	index_file *os.File
+	index TreeNode
+	use_index bool
 }
 
 type DataIndex struct {
@@ -61,7 +68,20 @@ func initStorageReader(dir string, file_number int) *StorageReader {
 	if err != nil {
 		panic("Failed to create a storage reader")
 	}
-	return &StorageReader{ f }
+	index_file_path := fmt.Sprintf("./%s/index_%d", dir, file_number)
+	index_f, err := os.Open(index_file_path)
+	if err != nil {
+		panic("Failed to read index file for creating storage reader")
+	}
+	root := readIndexFile(index_f)
+	return &StorageReader{ f, index_f, root, true }
+}
+
+func findOffset(r TreeNode, k string) string {
+	v, _ := r.Find(k)
+	// TODO: incorporate file name into reading
+	splits := strings.Split(v, "-")
+	return splits[1]
 }
 
 func (r *StorageReader) ReadRow(offset int64) (*Data, int64) {
@@ -126,6 +146,12 @@ func (r *StorageReader) ReadRow(offset int64) (*Data, int64) {
 
 
 func (r *StorageReader) Read(s string) *Data {
+	if r.index != nil {
+		offset := findOffset(r.index, s)
+		o, _ := strconv.Atoi(offset)
+		d, _ := r.ReadRow(int64(o))
+		return d
+	}
 	_, err := r.file.Seek(0, 0)
 	if err != nil {
 		log.Fatal(err)
@@ -238,7 +264,6 @@ func initStorageWriter(dir string, file_number int) *StorageWriter {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// TODO: this should read from index file
 	index_file_name := fmt.Sprintf("./%s/index_%d", dir, file_number)
 	index_file, err := os.OpenFile(index_file_name, default_storage_write_mode, permission)
 	if err != nil {
@@ -252,8 +277,7 @@ func initStorageWriter(dir string, file_number int) *StorageWriter {
 	if err != nil {
 		log.Fatal(err)
 	}
-	index := readIndexFile(index_file)
-	return &StorageWriter{ f, index_file, index }
+	return &StorageWriter{ f, index_file, nil, true}
 }
 
 func ToVarInts [T ~uint32| ~uint64 | ~int32 | ~int64 | ~int] (i T) []byte {
@@ -324,7 +348,6 @@ func (s *StorageWriter) Write(p *Data) bool {
 	offset := default_file_size - fsize
 	data := ToBytes(p)
 	_, err = s.file.WriteAt(data, int64(offset))
-	s.tree_index.Insert(p.row_key, fmt.Sprintf("%s:%d", s.file.Name(), offset))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -335,7 +358,48 @@ func (s *StorageWriter) Write(p *Data) bool {
 	if err != nil {
 		log.Fatal(err)
 	}
+	
+	if s.use_index {
+		index_written := s.writeIndexFile(p, offset)
+		return index_written
+	}
 	return true
+}
+
+func (s *StorageWriter) writeIndexFile(p *Data, offset uint32) bool {
+	if s.index == nil {
+		s.index = readIndexFile(s.index_file)
+	}
+	s.index.Insert(p.row_key, fmt.Sprintf("%s-%d", s.file.Name(), offset))
+	s.index_file.Seek(4, io.SeekStart)
+	var sz uint32 = 0
+	for n := range s.index.All() {
+		for _, record := range n.GetIndexRecord() {
+			sz += writeSingleIndexRecord(s, record, sz)
+		}
+	}
+	index_free_space := default_file_size - (sz + 4)
+	index_buf := new(bytes.Buffer)
+	err := binary.Write(index_buf, binary.BigEndian, index_free_space)
+	_, err = s.index_file.WriteAt(index_buf.Bytes(), 0)
+	if err != nil {
+		log.Fatal(err)
+	}
+	s.index_file.Seek(0, io.SeekStart)
+	return true
+}
+
+func writeSingleIndexRecord(s *StorageWriter, record *IndexRecord,
+	sz uint32) uint32 {
+	data := ToBytesForString(fmt.Sprintf("%s,%s", (*record).k, (*record).v))
+	if (sz + uint32(len(data))) > default_file_size {
+		log.Fatal("No more space for index file")
+	}
+	_, err := s.index_file.Write(data)
+	if err != nil {
+			log.Fatal(err)
+	}
+	return uint32(len(data))
 }
 
 func readIndexFile(index_file *os.File) TreeNode {
@@ -353,26 +417,34 @@ func readIndexFile(index_file *os.File) TreeNode {
 		free_space = free_space << 8
 		free_space |= uint32(buf[i])
 	}
-	max_size_to_read := int(default_file_size - free_space)
+	max_size_to_read := int(default_file_size - free_space - 4)
 	current_size := 0
 	root := newRootNode(default_index_key_space_size)
 	for current_size < max_size_to_read {
 		payload_size, p_n, varint_err := parseVarInts(index_file)
 		if varint_err == io.EOF { break }
-		key_size, k_n, varint_err := parseVarInts(index_file)
-		if varint_err == io.EOF { break }
-		key, string_err := parseString(index_file, key_size)
+		value, string_err := parseString(index_file, payload_size)
 		if string_err == io.EOF { break }
-		value_sz, v_n, varint_err := parseVarInts(index_file)
-		if varint_err == io.EOF { break }
-		value, string_err := parseString(index_file, value_sz)
-		if string_err == io.EOF { break }
-		current_size += payload_size + p_n + key_size + k_n + value_sz + v_n
-		root.Insert(key, value)
+		current_size += payload_size + p_n
+		splits := strings.Split(value, ",")
+		root.Insert(splits[0], splits[1])
+	}
+	_, err = index_file.Seek(0, 0)
+	if err != nil {
+		log.Fatal(err)
 	}
 	return root
 }
 
+func ToBytesForString(p string) []byte {
+	output := make([]byte, 0)
+	payload_size := ToVarInts(len(p))
+	output = append(output, payload_size...)
+	for i := 0; i < len(p); i++{
+		output = append(output, byte(p[i]))
+	}
+	return output
+}
 
 func ToBytes(p *Data) []byte {
 	output := make([]byte, 0)
@@ -411,8 +483,14 @@ func (s *StorageWriter) Flush() {
 		if err := s.file.Close(); err != nil {
 			log.Fatal(err)
 		}
+		if err := s.index_file.Close(); err != nil {
+			log.Fatal(err)
+		}
 	}()
 	if err := s.file.Sync(); err != nil {
+		log.Fatal(err)
+	}
+	if err := s.index_file.Sync(); err != nil {
 		log.Fatal(err)
 	}
 }
