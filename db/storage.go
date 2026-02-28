@@ -149,7 +149,7 @@ func (r *StorageReader) Read(s string) *Data {
 	if r.index != nil {
 		offset := findOffset(r.index, s)
 		o, _ := strconv.Atoi(offset)
-		d, _ := r.ReadRow(int64(o))
+		d, _ := r.ReadRow(int64(o - 4))
 		return d
 	}
 	_, err := r.file.Seek(0, 0)
