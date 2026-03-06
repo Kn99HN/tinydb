@@ -15,6 +15,7 @@ const default_storage_write_mode = os.O_CREATE | os.O_RDWR
 const permission = 0750
 const default_file_size uint32 = 1024
 const default_index_key_space_size = 3
+const file_size_byte = 4
 
 type Column struct {
 	name string
@@ -84,21 +85,31 @@ func findOffset(r TreeNode, k string) string {
 	return splits[1]
 }
 
-func (r *StorageReader) ReadRow(offset int64) (*Data, int64) {
+func extractFileSize(f *os.File) (uint32, error) {
 	var free_space uint32 = 0
-	file_size := make([]byte, 4)
-	_, err := r.file.ReadAt(file_size, 0)
-	if err == io.EOF { return nil, offset }
+	file_size := make([]byte, file_size_byte)
+	_, err := f.ReadAt(file_size, 0)
+	if err == io.EOF { return 0, err }
 	if err != nil {
-		log.Fatal(err)
+		return 0, err
 	}
 	for i := 0; i < len(file_size); i++ {
 		free_space = free_space << 8
 		free_space |= uint32(file_size[i])
 	}
+	return free_space, nil
+}
+
+
+
+func (r *StorageReader) ReadRow(offset int64) (*Data, int64) {
+	free_space, err := extractFileSize(r.file)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	occupied_sz := default_file_size - free_space
-	rd_offset := offset + 4
+	rd_offset := offset + file_size_byte
 	if rd_offset >= int64(occupied_sz) {
 		return nil, offset
 	}
@@ -149,25 +160,19 @@ func (r *StorageReader) Read(s string) *Data {
 	if r.index != nil {
 		offset := findOffset(r.index, s)
 		o, _ := strconv.Atoi(offset)
-		d, _ := r.ReadRow(int64(o - 4))
+		d, _ := r.ReadRow(int64(o - file_size_byte))
 		return d
 	}
 	_, err := r.file.Seek(0, 0)
 	if err != nil {
 		log.Fatal(err)
 	}
-	buf := make([]byte, 4)
-	_, err = r.file.Read(buf)
+	free_space, err := extractFileSize(r.file)
 	if err != nil {
 		log.Fatal(err)
 	}
-	var free_space uint32 = 0
-	for i := 0; i < len(buf); i++ {
-		free_space = free_space << 8
-		free_space |= uint32(buf[i])
-	}
 	max_size_to_read := default_file_size - free_space
-	var current_size uint32 = 4
+	var current_size uint32 = file_size_byte
 	d := &Data{}
 	d.cols = make([]Column, 0)
 	for current_size < max_size_to_read {
@@ -330,16 +335,9 @@ func (s *StorageWriter) Write(p *Data) bool {
 	3. Write the row record into the last offset.
 	4. Return true if the file accepts the writes
 	*/
-	var fsize uint32 = 0
-	file_size := make([]byte, 4)
-	_, err := s.file.ReadAt(file_size, 0)
-	if err == io.EOF { return false }
+	fsize, err := extractFileSize(s.file)
 	if err != nil {
 		log.Fatal(err)
-	}
-	for i := 0; i < len(file_size); i++ {
-		fsize = fsize << 8
-		fsize |= uint32(file_size[i])
 	}
 	if p.size > fsize {
 		fmt.Printf("Data size is %d compared to available size %d", p.size, fsize)
@@ -371,14 +369,14 @@ func (s *StorageWriter) writeIndexFile(p *Data, offset uint32) bool {
 		s.index = readIndexFile(s.index_file)
 	}
 	s.index.Insert(p.row_key, fmt.Sprintf("%s-%d", s.file.Name(), offset))
-	s.index_file.Seek(4, io.SeekStart)
+	s.index_file.Seek(file_size_byte, io.SeekStart)
 	var sz uint32 = 0
 	for n := range s.index.All() {
 		for _, record := range n.GetIndexRecord() {
 			sz += writeSingleIndexRecord(s, record, sz)
 		}
 	}
-	index_free_space := default_file_size - (sz + 4)
+	index_free_space := default_file_size - (sz + file_size_byte)
 	index_buf := new(bytes.Buffer)
 	err := binary.Write(index_buf, binary.BigEndian, index_free_space)
 	_, err = s.index_file.WriteAt(index_buf.Bytes(), 0)
@@ -391,8 +389,10 @@ func (s *StorageWriter) writeIndexFile(p *Data, offset uint32) bool {
 
 func writeSingleIndexRecord(s *StorageWriter, record *IndexRecord,
 	sz uint32) uint32 {
-	data := ToBytesForString(fmt.Sprintf("%s,%s", (*record).k, (*record).v))
-	if (sz + uint32(len(data))) > default_file_size {
+	index_payload := fmt.Sprintf("%s,%s", (*record).k, (*record).v)
+	data := ToBytesForString(index_payload)
+	potential_sz := sz + uint32(len(data))
+	if (potential_sz > default_file_size) {
 		log.Fatal("No more space for index file")
 	}
 	_, err := s.index_file.Write(data)
@@ -407,17 +407,12 @@ func readIndexFile(index_file *os.File) TreeNode {
 	if err != nil {
 		log.Fatal(err)
 	}
-	buf := make([]byte, 4)
-	_, err = index_file.Read(buf)
+	free_space, err := extractFileSize(index_file)
+	index_file.Seek(file_size_byte, 0)
 	if err != nil {
 		log.Fatal(err)
 	}
-	var free_space uint32 = 0
-	for i := 0; i < len(buf); i++ {
-		free_space = free_space << 8
-		free_space |= uint32(buf[i])
-	}
-	max_size_to_read := int(default_file_size - free_space - 4)
+	max_size_to_read := int(default_file_size - free_space - file_size_byte)
 	current_size := 0
 	root := newRootNode(default_index_key_space_size)
 	for current_size < max_size_to_read {
