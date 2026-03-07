@@ -36,6 +36,7 @@ type TreeNode interface {
 	IsRootNode() bool
 	All() iter.Seq[TreeNode]
 	GetIndexRecord() []*IndexRecord
+	//Delete(k string)
 }
 
 type NotFoundError struct {
@@ -197,6 +198,9 @@ func (n *InternalNode) SetParent(p TreeNode) {
 }
 
 func BinarySearch(keys []string, k string, low int, high int, mode SearchMode) (int, bool) {
+	if len(keys) < 1  {
+		return 0, false
+	}
 	mid := (high + low) / 2
 	if mid < 0 || mid > len(keys) {
 		mid = len(keys) - 1
@@ -372,6 +376,11 @@ func (n *InternalNode) Insert(k string, v string) bool {
 }
 
 func (n *LeafNode) Insert(k string, v string) bool {
+	i, exist := BinarySearch(n.keys, k, 0, len(n.keys), VALUE)
+	if exist {
+		n.values[i] = v
+		return true
+	}
 	if (len(n.keys) + 1) >= n.m {
 		n.keys = append(n.keys, k)
 		n.values = append(n.values, v)
