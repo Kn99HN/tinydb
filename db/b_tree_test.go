@@ -43,8 +43,6 @@ func TestIterator(t *testing.T) {
 	}
 }
 
-
-
 func TestInsertAndFind(t *testing.T) {
 	root := newRootNode(3)
 	root.Insert("1", "1")
@@ -57,6 +55,22 @@ func TestInsertAndFind(t *testing.T) {
 	}
 }
 
+func TestInsertAndFindDuplicateKey(t *testing.T) {
+	root := newRootNode(3)
+	root.Insert("1", "1")
+	root.Insert("2", "2")
+
+	actual, _ := root.Find("2")
+	root.Insert("2", "3")
+	actual_after_insert, _ := root.Find("2")
+
+	if actual != "2" {
+		t.Errorf("Expected %v. Actual %v", 2, actual)
+	}
+	if actual_after_insert != "3" {
+		t.Errorf("Expected %v. Actual %v", 3, actual_after_insert)
+	}
+}
 
 func TestInsertAndFindTwoLevels(t *testing.T) {
 	root := newRootNode(3)
