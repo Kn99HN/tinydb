@@ -1,7 +1,7 @@
 package db
 
 import (
-	//"fmt"
+	"fmt"
 	"slices"
 	"strings"
 	//"iter"
@@ -31,6 +31,10 @@ type splitResult struct {
 	right *BTreeNode
 }
 
+func (n *splitResult) String() string {
+	return fmt.Sprintf("{ promoted_key: %s, right: %v }", (*n).promoted_key, (*n).right)
+}
+
 func initBTree(m int) *BTree {
 	return &BTree{ root: initBTreeNode(m) }
 }
@@ -40,7 +44,16 @@ func (r *BTree) Find(s string) (string, bool) {
 }
 
 func (r *BTree) Insert(s string, v string) {
-	r.root.insert(s, v)
+	split, is_split := r.root.insert(s, v)
+	n := r.root
+	if is_split {
+		new_node := initBTreeNode((*n).m)
+		new_node.keys, new_node.values, _ = insertSorted(new_node.keys, new_node.values,
+		split.promoted_key, "", INTERNAL)
+		new_node.children = append(new_node.children, n)
+		new_node.children = append(new_node.children, split.right)
+		r.root = new_node
+	}
 }
 
 func initBTreeNode(m int) *BTreeNode {
@@ -80,7 +93,7 @@ func (n *BTreeNode) insert(s string, v string) (*splitResult, bool) {
 		child = (*n).children[idx]
  }
  if child == nil {
-		n.keys, n.values, _ = insertSorted(n.keys, n.values, s, LEAF)
+		n.keys, n.values, _ = insertSorted(n.keys, n.values, s, v, LEAF)
 		current_children = len((*n).keys)
 		if current_children == max_number_of_keys {
 			return split(n), true
@@ -90,7 +103,8 @@ func (n *BTreeNode) insert(s string, v string) (*splitResult, bool) {
  split_result, is_split := child.insert(s, v)
  if is_split {
 		var i int
-		n.keys, n.values, i = insertSorted(n.keys, n.values, split_result.promoted_key, INTERNAL)
+		n.keys, n.values, i = insertSorted(n.keys, n.values,
+		split_result.promoted_key, "", INTERNAL)
 		current_children = len((*n).keys)
 		n.children[i + 1] = split_result.right
 		if current_children == max_number_of_keys {
@@ -104,28 +118,33 @@ func (n *BTreeNode) insert(s string, v string) (*splitResult, bool) {
 func split(n *BTreeNode) *splitResult {
 	idx := len((*n).keys) / 2
 	promoted_key := (*n).keys[idx]
-	right_keys := (*n).keys[idx:]
-	(*n).keys = (*n).keys[0:idx]
-	right_values := (*n).values[idx:]
-	(*n).values = (*n).values[0:idx]
+	split_idx := idx + 1
+	right_keys := (*n).keys[split_idx:]
+	(*n).keys = (*n).keys[0:split_idx]
+	right_values := (*n).values[split_idx:]
+	(*n).values = (*n).values[0:split_idx]
 	right_node := initBTreeNode((*n).m)
 	right_node.keys = right_keys
 	right_node.values = right_values
+	n.sibling = right_node
 	return &splitResult{ promoted_key, right_node }
 }
 
 func insertSorted(keys []string, 
-	vals []string, val string, t NodeType) ([]string, []string, int) {
+	vals []string, key, val string, t NodeType) ([]string, []string, int) {
 	keys = append(keys, "0")        // grow by 1
+	if t == LEAF {
+		vals = append(vals, "0")
+	}
   i := len(keys) - 1
-	for i > 0 && strings.Compare(keys[i-1], val) > 0 {
+	for i > 0 && strings.Compare(keys[i-1], key) > 0 {
 	 keys[i] = keys[i-1]       // shift right
 	 if t == LEAF {
 	 	vals[i] = vals[i - 1]
 	 }
 	 i--
 	}
-	keys[i] = val
+	keys[i] = key
 	if t == LEAF {
 		vals[i] = val
 		return keys, vals, i
