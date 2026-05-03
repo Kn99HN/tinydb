@@ -8,10 +8,17 @@ import (
 )
 
 type SearchMode int
+type Direction int
 
 const (
 	VALUE SearchMode = iota
 	CHILDREN
+)
+
+const (
+	LEFT Direction = iota
+	RIGHT
+	SPLIT
 )
 
 type IndexRecord struct {
@@ -24,9 +31,9 @@ type TreeNode interface {
 	Find(k string) (string, error)
 	Balance() bool
 	SetParent(p TreeNode)
-	SetSibling(p TreeNode)
 	String() string
 	AddKey(k string)
+	SetKey(k string, i int)
 	AddValue(v string)
 	AddChild(c TreeNode)
 	UpsertKeys([]string)
@@ -36,7 +43,7 @@ type TreeNode interface {
 	IsRootNode() bool
 	All() iter.Seq[TreeNode]
 	GetIndexRecord() []*IndexRecord
-	//Delete(k string)
+	BinarySearchKey(v string) (int, bool)
 }
 
 type NotFoundError struct {
@@ -92,28 +99,34 @@ type LeafNode struct {
 	parent TreeNode
 	keys []string
 	values []string
-	sibling TreeNode
+	left_sibling *LeafNode
+	right_sibling *LeafNode
 }
 
-func newRootNode(m int) TreeNode {
+func newRootNode(m int) *RootNode {
 	return &RootNode {m, nil}
 }
 
-func newInternalNode(m int) TreeNode {
+func newInternalNode(m int) *InternalNode {
 	return &InternalNode {
 		m, make([]TreeNode, 0), make([]string, 0), nil,
 	}
 }
 
-func newLeafNode(m int) TreeNode {
+func newLeafNode(m int) *LeafNode {
 	return &LeafNode {
-		m, nil, make([]string, 0), make([]string, 0), nil,
+		m, nil, make([]string, 0), make([]string, 0), nil, nil,
 	}
 }
 
 func (n *RootNode) IsRootNode() bool { return true }
 func (n *LeafNode) IsRootNode() bool { return false }
 func (n *InternalNode) IsRootNode() bool { return false }
+
+func (n *RootNode) SetKey(k string, i int) {}
+func (n *LeafNode) SetKey(k string, i int) { n.keys[i] = k }
+func (n *InternalNode) SetKey(k string, i int) { n.keys[i] = k }
+
 
 func (n *RootNode) AddKey(k string) {}
 func (n *LeafNode) AddKey(k string) {
@@ -172,11 +185,24 @@ func (n *InternalNode) AddChild(c TreeNode) {
 	n.children = append(n.children, c)
 }
 
-func (n *RootNode) SetSibling(p TreeNode) {}
-func (n *LeafNode) SetSibling(p TreeNode) {
-	n.sibling = p
+func (n *LeafNode) SetLeftSibling(s *LeafNode) {
+	n.left_sibling = s
 }
-func (n *InternalNode) SetSibling(p TreeNode) {}
+
+func (n *LeafNode) SetRightSibling(s *LeafNode) {
+	n.right_sibling = s
+}
+
+func (n *LeafNode) GetRotationDirection() Direction {
+	if n.left_sibling == nil  && len(n.right_sibling.keys) < (n.m / 2) {
+		return RIGHT
+	}
+	if len(n.left_sibling.keys) < (n.m / 2) {
+		return LEFT
+	}
+	return SPLIT
+}
+
 
 func (n *RootNode) GetIndexRecord() []*IndexRecord { return []*IndexRecord{} }
 func (n *LeafNode) GetIndexRecord() []*IndexRecord {
@@ -294,6 +320,90 @@ func (n *RootNode) Insert(k string, v string) bool {
 	return n.child.Insert(k, v)
 }
 
+func (n *InternalNode) BinarySearchKey(k string) (int, bool) {
+	if len(n.keys) < 1  {
+		return 0, false
+	}
+	low := 0
+	high := len(n.keys)
+	mid := (high + low) / 2
+	if mid < 0 || mid > len(n.keys) {
+		mid = len(n.keys) - 1
+	}
+	pivot := n.keys[mid]
+	res := strings.Compare(pivot, k)
+	if (high - low) == 1 {
+		if res <= 0 {
+			return mid, res == 0
+		}
+		return mid, false
+	}
+	if res <= 0 {
+		return n.BinarySearchKey(k)
+	}
+	return n.BinarySearchKey(k)
+}
+
+
+
+func (n *LeafNode) BinarySearchKey(k string) (int, bool) {
+	if len(n.keys) < 1  {
+		return 0, false
+	}
+	low := 0
+	high := len(n.keys)
+	mid := (high + low) / 2
+	if mid < 0 || mid > len(n.keys) {
+		mid = len(n.keys) - 1
+	}
+	pivot := n.keys[mid]
+	res := strings.Compare(pivot, k)
+	if (high - low) == 1 {
+		if res <= 0 {
+			return mid, res == 0
+		}
+		return mid, false
+	}
+	if res <= 0 {
+		return n.BinarySearchKey(k)
+	}
+	return n.BinarySearchKey(k)
+}
+
+func (n *RootNode) BinarySearchKey(k string) (int, bool) {
+ return 0, false
+}
+
+/*
+
+General rotation
+- Move the biggest key to the parent if moving from left -> right
+- Move the smallest key to the parent if moving from right -> left
+*/
+func (n *LeafNode) Rotate(direction Direction) {
+	switch direction {
+		case LEFT:
+		 current_key := n.keys[0]
+		 current_value := n.values[0]
+		 n.keys = n.keys[1:]
+		 n.values = n.values[1:]
+		 n.left_sibling.AddKey(current_key)
+		 n.left_sibling.AddKey(current_value)
+		 rotated_key_index, _ := n.parent.BinarySearchKey(current_key)
+		 n.parent.SetKey(n.keys[0], rotated_key_index)
+   case RIGHT:
+		 last_index := len(n.keys) - 1
+		 current_key := n.keys[last_index]
+		 current_value := n.values[last_index]
+		 n.keys = n.keys[:last_index]
+		 n.values = n.values[:last_index]
+		 n.right_sibling.AddKey(current_key)
+		 n.right_sibling.AddKey(current_value)
+		 rotated_key_index, _ := n.BinarySearchKey(current_key)
+		 n.parent.SetKey(n.keys[0], rotated_key_index)
+	}
+}
+
 func (n *LeafNode) Balance() bool {
 	QuickSort(n.keys, n.values, nil)
 	mid := len(n.keys) / 2
@@ -322,7 +432,8 @@ func (n *LeafNode) Balance() bool {
 	internal_node.AddKey(mid_key)
 	internal_node.AddChild(right_node)
 	right_node.SetParent(internal_node)
-	n.sibling = right_node
+	n.SetRightSibling(right_node)
+	right_node.SetLeftSibling(n)
 
 	if n.parent != nil && n.parent.NeedBalance() {
 		n.parent.Balance()
@@ -382,6 +493,10 @@ func (n *LeafNode) Insert(k string, v string) bool {
 		return true
 	}
 	if (len(n.keys) + 1) >= n.m {
+		direction := n.GetRotationDirection()
+		if !n.parent.IsRootNode() && direction != SPLIT {
+			n.Rotate(direction)
+		}
 		n.keys = append(n.keys, k)
 		n.values = append(n.values, v)
 		n.Balance()
